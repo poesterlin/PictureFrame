@@ -1,9 +1,13 @@
 <script>
-	import * as Sentry from '@sentry/browser';
-	Sentry.init({
-		integrations: [new Sentry.BrowserTracing()],
-		tracesSampleRate: 1.0,
-		replaysOnErrorSampleRate: 0.1
+	import { onMount } from 'svelte';
+
+	onMount(async () => {
+		const Sentry = await import('@sentry/browser');
+		Sentry.init({
+			integrations: [new Sentry.BrowserTracing()],
+			tracesSampleRate: 1.0,
+			replaysOnErrorSampleRate: 0.1
+		});
 	});
 </script>
 

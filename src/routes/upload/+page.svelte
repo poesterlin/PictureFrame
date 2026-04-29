@@ -1,5 +1,4 @@
 <script lang="ts">
-	import * as Sentry from '@sentry/browser';
 	import throttle from 'lodash.throttle';
 	import type { DrawingOptions } from '$lib/dither';
 	import type { Remote } from 'comlink';
@@ -7,16 +6,23 @@
 	import { getWorkerInstance } from '$lib/util';
 	import { native } from '$lib/no-worker';
 
+	type SentryModule = typeof import('@sentry/browser');
+
 	let input: HTMLInputElement;
 	let img: HTMLImageElement;
 	let canvas: HTMLCanvasElement;
 	let workerInstance: Remote<typeof import('$lib/dithering-worker')>;
 	let context: CanvasRenderingContext2D;
+	let sentry: SentryModule | null = null;
 
 	onMount(() => {
 		context = canvas.getContext('2d', { willReadFrequently: true })!;
 		isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 		isSafari = true;
+
+		void import('@sentry/browser').then((mod) => {
+			sentry = mod;
+		});
 
 		if (!isSafari) {
 			try {
@@ -55,8 +61,8 @@
 		}
 		processing = true;
 
-		const transaction = Sentry.startTransaction({ name: 'upload-transaction' });
-		const span = transaction.startChild({ op: 'dither' });
+		const transaction = sentry?.startTransaction({ name: 'upload-transaction' });
+		const span = transaction?.startChild({ op: 'dither' });
 
 		const imgData = context.getImageData(0, 0, 800, 480);
 		const options = {
@@ -84,8 +90,8 @@
 		loading = false;
 		processing = false;
 
-		span.finish();
-		transaction.finish();
+		span?.finish();
+		transaction?.finish();
 	}
 
 	const throttled = async () => await throttle(() => ditherImg(), 120, { leading: true })();
