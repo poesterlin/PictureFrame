@@ -19,6 +19,7 @@ static frame_settings_t s_settings;
 
 static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
+static const int WIFI_READY_WAIT_MS = 60000;
 
 static bool starts_with(const char *value, const char *prefix) {
 	return value != NULL && prefix != NULL && strncmp(value, prefix, strlen(prefix)) == 0;
@@ -149,7 +150,9 @@ void app_main(void) {
 	}
 
 	ESP_ERROR_CHECK(wifi_manager_connect(s_settings.wifi_ssid, s_settings.wifi_password) ? ESP_OK : ESP_FAIL);
-	ESP_ERROR_CHECK(wifi_manager_wait_until_ready(20000) ? ESP_OK : ESP_FAIL);
+	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
+		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
+	}
 	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, s_settings.device_id, ws_message_handler) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);
 	ESP_LOGI(TAG, "connected to websocket as deviceId=%s", s_settings.device_id);
