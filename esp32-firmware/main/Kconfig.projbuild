@@ -1,0 +1,11 @@
+menu "PictureFrame settings"
+
+config FRAME_WS_BASE_URL
+    string "WebSocket base URL"
+    default "wss://frame.oesterlin.dev/ws"
+
+config FRAME_ASSET_BASE_URL
+    string "Frame asset base URL"
+    default "https://frame.oesterlin.dev"
+
+endmenu

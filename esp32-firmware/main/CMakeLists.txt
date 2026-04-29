@@ -1,0 +1,20 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "wifi_manager.c"
+        "frame_ws.c"
+        "frame_fetcher.c"
+        "display_driver.c"
+        "settings_store.c"
+        "ble_provisioning.c"
+    INCLUDE_DIRS "."
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_event
+        esp_netif
+        esp-tls
+        esp_http_client
+        esp_websocket_client
+        bt
+)
