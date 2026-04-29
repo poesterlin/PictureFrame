@@ -1,12 +1,12 @@
 import type { Actions } from './$types';
-import { PutObjectCommand, type PutObjectCommandInput } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import type { color } from '$lib/dither';
-import { mqttClient, commands, sendMqtt } from '$lib/mqtt';
-import { env } from '$env/dynamic/private';
-import { s3Client } from '$lib/s3';
+import { frameFormat, resolveDeviceId, type DisplayUpdateMessage } from '$lib/device-contract';
+import { getDeviceBus } from '../../../realtime/device-bus.js';
+import { storeFrameArtifacts } from '../../../realtime/frame-storage.js';
 
 export const prerender = false;
+const bus = getDeviceBus();
 
 export const actions: Actions = {
 	default: async ({ request }: { request: Request }) => {
@@ -15,29 +15,35 @@ export const actions: Actions = {
 		const name = values.get('name') as string;
 		console.log('new image from', name);
 
-		const requestId = values.get('reqId') as string;
+		const requestId = (values.get('reqId') as string) || crypto.randomUUID();
 
 		const file = values.get('image') as File;
 		const blob = await file.arrayBuffer();
 		const txt = await dither(Buffer.from(blob));
+		const frame = encodeFrameArtifact(txt, frameFormat.width, frameFormat.height);
+		const normalizedRequestId = requestId.replace('.', '');
+		const deviceId = resolveDeviceId(values.get('deviceId') as string);
 
-		const key = `submitions/${name}/${requestId.replace('.', '')}.txt`;
-		const params: PutObjectCommandInput = {
-			Bucket: env.S3_BUCKET,
-			Key: key,
-			Body: Buffer.from(txt),
-			ACL: 'public-read',
-			Metadata: {
-				'Content-type': 'text/plain'
-			}
+		const stored = await storeFrameArtifacts(
+			name,
+			normalizedRequestId,
+			Buffer.from(txt),
+			frame
+		);
+		console.log('stored local frame', stored.artifactKey);
+
+		const updateMessage: DisplayUpdateMessage = {
+			type: 'display',
+			deviceId,
+			requestId: normalizedRequestId,
+			createdAt: new Date().toISOString(),
+			artifactKey: stored.artifactKey,
+			legacyKey: stored.legacyKey
 		};
 
-		await s3Client.send(new PutObjectCommand(params));
-		console.log('uploaded', key);
+		bus.publishDisplay(updateMessage);
 
-		await sendMqtt(commands.update, key)
-
-		console.log('messaged mqtt');
+		console.log('pushed update to websocket bus');
 	}
 };
 
@@ -106,4 +112,18 @@ function approximateColor(color: color, palette: color[]) {
 
 function colorDistance(a: color, b: color) {
 	return Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2) + Math.pow(a[2] - b[2], 2));
+}
+
+function encodeFrameArtifact(indexedFrame: Uint8ClampedArray, width: number, height: number) {
+	const header = Buffer.from([
+		frameFormat.magic.charCodeAt(0),
+		frameFormat.magic.charCodeAt(1),
+		frameFormat.magic.charCodeAt(2),
+		frameFormat.magic.charCodeAt(3),
+		width & 0xff,
+		(width >> 8) & 0xff,
+		height & 0xff,
+		(height >> 8) & 0xff
+	]);
+	return Buffer.concat([header, Buffer.from(indexedFrame)]);
 }

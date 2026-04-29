@@ -21,3 +21,12 @@ update-service/e-inc/c/pic/img.txt
 update-service/refresh.txt
 update-service/log.txt
 update-service/output
+
+# Local frame storage (keep directory scaffold only)
+data/frames/*
+!data/frames/.gitkeep
+
+# ESP-IDF generated artifacts
+esp32-firmware/build/
+esp32-firmware/managed_components/
+esp32-firmware/sdkconfig.old

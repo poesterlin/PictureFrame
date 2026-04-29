@@ -1,16 +1,22 @@
 <script lang="ts">
 	let settings = {
-		download: false,
 		deleteCurrent: false,
 		reboot: false,
 		refreshNow: false,
 		refreshEvery: 10 * 60,
-		clearLog: false
+		clearLog: false,
+		syncNow: false,
+		deviceId: 'default'
 	};
 
 	$: {
-		if (settings.deleteCurrent || settings.reboot || settings.refreshNow || settings.download || settings.clearLog) {
-			settings.refreshEvery = 0;
+		if (
+			settings.deleteCurrent ||
+			settings.reboot ||
+			settings.refreshNow ||
+			settings.syncNow ||
+			settings.clearLog
+		) {
 			upload();
 		}
 	}
@@ -35,7 +41,7 @@
 		settings.deleteCurrent = false;
 		settings.reboot = false;
 		settings.refreshNow = false;
-		settings.download = false;
+		settings.syncNow = false;
 		settings.clearLog = false;
 	}
 
@@ -63,6 +69,8 @@
 <form>
 	<a class="fill" href="/connect">Wlan verbinden</a>
 	<span>
+		<label for="deviceId">Device ID</label>
+		<input type="text" id="deviceId" bind:value={settings.deviceId} />
 		<input
 			type="range"
 			id="refresh"
@@ -78,8 +86,7 @@
 
 	<button class="fill" on:click={() => (settings.refreshNow = true)}>Nächstes Bild</button>
 	<button class="fill" on:click={() => (settings.clearLog = true)}>Logs löschen</button>
-	<button class="fill" on:click={() => (settings.download = true)}>Neue Bilder herunterladen</button
-	>
+	<button class="fill" on:click={() => (settings.syncNow = true)}>Jetzt synchronisieren</button>
 	<button class="danger" on:click={() => (settings.reboot = true)}>Rahmen Neustarten</button>
 
 </form>

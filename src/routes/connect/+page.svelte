@@ -1,11 +1,16 @@
 <script lang="ts">
+	import { bleProfile } from '$lib/device-contract';
+
 	let ssid = '';
 	let password = '';
+	let deviceId = 'default';
 
 	let logs: string[] = [];
 
 	async function onButtonClick() {
-		const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [0xec00] }] });
+		const device = await navigator.bluetooth.requestDevice({
+			filters: [{ services: [bleProfile.serviceUuid] }]
+		});
 		console.log(device);
 
 		if (!device?.gatt?.connect) {
@@ -20,13 +25,13 @@
 		}
 		console.log('connected', server);
 
-		const service = await server.getPrimaryService(0xec00);
+		const service = await server.getPrimaryService(bleProfile.serviceUuid);
 		console.log('service', service);
 
 		const characteristics = await service.getCharacteristics();
 		console.log('characteristics', characteristics);
 
-		const characteristic = await service.getCharacteristic(0xec0e);
+		const characteristic = await service.getCharacteristic(bleProfile.wifiWriteCharacteristicUuid);
 		console.log('characteristic', characteristic);
 
 		// subscribe to characteristic
@@ -36,13 +41,15 @@
 
 		// write to characteristic
 		const encoder = new TextEncoder();
-		const data = { ssid, password };
+		const data = { type: 'wifiProvision', ssid, password, deviceId };
 		const value = encoder.encode(JSON.stringify(data));
 		await characteristic.writeValue(value);
 	}
 
 	async function getLogs() {
-		const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [0xec00] }] });
+		const device = await navigator.bluetooth.requestDevice({
+			filters: [{ services: [bleProfile.serviceUuid] }]
+		});
 		console.log(device);
 
 		if (!device?.gatt?.connect) {
@@ -57,13 +64,13 @@
 		}
 		console.log('connected', server);
 
-		const service = await server.getPrimaryService(0xec00);
+		const service = await server.getPrimaryService(bleProfile.serviceUuid);
 		console.log('service', service);
 
 		const characteristics = await service.getCharacteristics();
 		console.log('characteristics', characteristics);
 
-		const characteristic = await service.getCharacteristic(0xec0f);
+		const characteristic = await service.getCharacteristic(bleProfile.logReadCharacteristicUuid);
 
 		// subscribe to characteristic
 		characteristic.addEventListener('characteristicvaluechanged', (event) => {
@@ -96,6 +103,10 @@
 		<div>
 			<label for="ssid">SSID</label>
 			<input type="text" id="ssid" bind:value={ssid} />
+		</div>
+		<div>
+			<label for="deviceId">Device ID</label>
+			<input type="text" id="deviceId" bind:value={deviceId} />
 		</div>
 		<div>
 			<label for="password">Passwort</label>

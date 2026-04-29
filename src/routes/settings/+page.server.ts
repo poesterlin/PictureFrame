@@ -1,47 +1,72 @@
-import { commands, sendMqtt } from "$lib/mqtt";
-import type { Actions } from "./$types";
-import type { ISettings } from "./settings";
+import {
+	resolveDeviceId,
+	type DeviceCommandMessage,
+	type DisplayUpdateMessage
+} from '$lib/device-contract';
+import type { Actions } from './$types';
+import type { ISettings } from './settings';
+import { getDeviceBus } from '../../../realtime/device-bus.js';
+import { pickRandomArtifactKey } from '../../../realtime/frame-storage.js';
 
 
 export const prerender = false;
+const bus = getDeviceBus();
 
 export const actions: Actions = {
-    default: async ({ request }: { request: Request }) => {
-        const form = await request.formData();
-        const values = JSON.parse(form.get("json") as string) as ISettings;
+	default: async ({ request }: { request: Request }) => {
+		const form = await request.formData();
+		const values = JSON.parse(form.get('json') as string) as ISettings;
 
-        const settings: Record<string, number | boolean | string> = {};
+		if (!values || typeof values !== 'object') {
+			return;
+		}
 
-        if (!values || typeof values != "object") {
-            return;
-        }
+		const deviceId = resolveDeviceId(values.deviceId);
+		const settings: DeviceCommandMessage = {
+			type: 'command',
+			deviceId
+		};
 
-        if (values.deleteCurrent && typeof values.deleteCurrent === "boolean") {
-            settings.deleteCurrent = values.deleteCurrent;
-        }
+		if (typeof values.deleteCurrent === 'boolean') {
+			settings.deleteCurrent = values.deleteCurrent;
+		}
 
-        if (values.reboot && typeof values.reboot === "boolean") {
-            settings.reboot = values.reboot;
-        }
+		if (typeof values.reboot === 'boolean') {
+			settings.reboot = values.reboot;
+		}
 
-        if (values.refreshNow && typeof values.refreshNow === "boolean") {
-            settings.refreshNow = values.refreshNow;
-        }
+		if (typeof values.refreshEvery === 'number') {
+			settings.refreshEvery = values.refreshEvery;
+		}
 
-        if (values.download && typeof values.download === "boolean") {
-            settings.download = values.download;
-        }
+		if (typeof values.clearLog === 'boolean') {
+			settings.clearLog = values.clearLog;
+		}
 
-        if (values.refreshEvery && typeof values.refreshEvery === "number") {
-            settings.refreshEvery = values.refreshEvery;
-        }
+		const shouldPushRandomFrame = values.refreshNow === true || values.syncNow === true;
+		if (shouldPushRandomFrame) {
+			const artifactKey = await pickRandomArtifactKey();
+			if (artifactKey) {
+				const displayMessage: DisplayUpdateMessage = {
+					type: 'display',
+					deviceId,
+					requestId: crypto.randomUUID(),
+					createdAt: new Date().toISOString(),
+					artifactKey
+				};
+				bus.publishDisplay(displayMessage);
+			}
+		}
 
-        if (values.clearLog && typeof values.clearLog === "boolean") {
-            settings.clearLog = values.clearLog;
-        }
+		const hasCommandBody =
+			typeof settings.refreshEvery === 'number' ||
+			typeof settings.reboot === 'boolean' ||
+			typeof settings.deleteCurrent === 'boolean' ||
+			typeof settings.clearLog === 'boolean';
 
-        console.log(values)
-        await sendMqtt(commands.commands, JSON.stringify(values))
-    }
+		if (hasCommandBody) {
+			console.log(settings);
+			bus.publishCommand(settings);
+		}
+	}
 };
-

@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PORT=3000
+      - FRAMES_DIR=/app/data/frames
+    volumes:
+      - frame_data:/app/data/frames
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`frame.oesterlin.dev`)"
+      - "traefik.http.services.app.loadbalancer.server.port=3000"
+    networks:
+      - traefik_web
+
+networks:
+  traefik_web:
+    external: true
+
+volumes:
+  frame_data:
