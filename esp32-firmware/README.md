@@ -53,6 +53,21 @@ idf.py -p /dev/ttyACM0 monitor
 
 If your board enumerates as `/dev/ttyUSB0` instead, replace the port accordingly.
 
+### Troubleshooting: `idf.py` not found
+
+If you see an error like `idf.py: command not found`, load the ESP-IDF environment in your current shell first:
+
+```bash
+. ~/esp/esp-idf/export.sh
+```
+
+Then verify and build:
+
+```bash
+idf.py --version
+idf.py build
+```
+
 ## Protocol
 
 - WebSocket endpoint: `wss://<host>/ws?deviceId=<deviceId>`

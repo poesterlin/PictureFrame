@@ -16,6 +16,15 @@ const bus = getDeviceBus();
 const port = Number(process.env.PORT || 3000);
 await ensureFramesDir();
 
+function logWs(event, details = {}) {
+	const payload = {
+		at: new Date().toISOString(),
+		event,
+		...details
+	};
+	console.log('[ws]', JSON.stringify(payload));
+}
+
 function resolveDeviceId(raw) {
 	return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'default';
 }
@@ -53,16 +62,26 @@ const server = createServer(async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on('connection', (socket, request, deviceId) => {
+	const remoteAddress = request.socket.remoteAddress;
+	logWs('connected', { deviceId, remoteAddress, url: request.url });
+
 	const unregister = bus.registerConnection(deviceId, socket);
 	const snapshot = bus.getSnapshot(deviceId);
 	socket.send(JSON.stringify(snapshot));
+	logWs('snapshot-sent', {
+		deviceId,
+		hasPendingDisplay: Boolean(snapshot.pending.display),
+		pendingCommandCount: snapshot.pending.commands.length
+	});
 	bus.ackPending(deviceId);
 
 	if (!snapshot.pending.display) {
 		pickRandomArtifactKey().then((artifactKey) => {
 			if (!artifactKey) {
+				logWs('random-display-skipped', { deviceId, reason: 'no-artifacts' });
 				return;
 			}
+			logWs('random-display-publish', { deviceId, artifactKey });
 			bus.publishDisplay({
 				type: 'display',
 				deviceId,
@@ -76,19 +95,34 @@ wss.on('connection', (socket, request, deviceId) => {
 	socket.on('message', (raw) => {
 		try {
 			const payload = JSON.parse(raw.toString());
+			logWs('message', {
+				deviceId,
+				type: payload?.type ?? 'unknown',
+				keys: Object.keys(payload ?? {})
+			});
 			if (payload.type === 'state' || payload.type === 'log' || payload.type === 'ack') {
 				bus.updateState(deviceId, payload);
 			}
 			if (payload.type === 'hello' && payload.deviceId === deviceId) {
+				logWs('hello-ack-sent', { deviceId });
 				socket.send(JSON.stringify(bus.getSnapshot(deviceId)));
 			}
 		} catch {
-			// ignore malformed payloads from clients
+			logWs('message-parse-error', { deviceId, raw: raw.toString().slice(0, 180) });
 		}
 	});
 
-	socket.on('close', () => {
+	socket.on('error', (error) => {
+		logWs('socket-error', { deviceId, message: error?.message ?? 'unknown' });
+	});
+
+	socket.on('close', (code, reasonBuffer) => {
 		unregister();
+		logWs('disconnected', {
+			deviceId,
+			code,
+			reason: reasonBuffer?.toString() || ''
+		});
 	});
 });
 

@@ -40,6 +40,7 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
 }
 
 bool frame_fetcher_download(const char *url, frame_payload_t *out_payload) {
+	ESP_LOGI(TAG, "downloading frame: %s", url);
 	fetch_buffer_t state = {0};
 	esp_http_client_config_t config = {
 		.url = url,
@@ -57,6 +58,14 @@ bool frame_fetcher_download(const char *url, frame_payload_t *out_payload) {
 	esp_err_t err = esp_http_client_perform(client);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "download failed: %s", esp_err_to_name(err));
+		esp_http_client_cleanup(client);
+		free(state.buffer);
+		return false;
+	}
+
+	int status_code = esp_http_client_get_status_code(client);
+	if (status_code < 200 || status_code >= 300) {
+		ESP_LOGE(TAG, "download returned HTTP %d", status_code);
 		esp_http_client_cleanup(client);
 		free(state.buffer);
 		return false;

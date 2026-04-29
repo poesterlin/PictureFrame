@@ -20,6 +20,30 @@ static frame_settings_t s_settings;
 static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
 
+static bool starts_with(const char *value, const char *prefix) {
+	return value != NULL && prefix != NULL && strncmp(value, prefix, strlen(prefix)) == 0;
+}
+
+static void build_artifact_url(char *out, size_t out_len, const char *artifact_key) {
+	if (starts_with(artifact_key, "http://") || starts_with(artifact_key, "https://")) {
+		snprintf(out, out_len, "%s", artifact_key);
+		return;
+	}
+	if (starts_with(artifact_key, "/frames/")) {
+		snprintf(out, out_len, "%s%s", FRAME_BASE_URL, artifact_key);
+		return;
+	}
+	if (starts_with(artifact_key, "frames/")) {
+		snprintf(out, out_len, "%s/%s", FRAME_BASE_URL, artifact_key);
+		return;
+	}
+	if (artifact_key[0] == '/') {
+		snprintf(out, out_len, "%s/frames%s", FRAME_BASE_URL, artifact_key);
+		return;
+	}
+	snprintf(out, out_len, "%s/frames/%s", FRAME_BASE_URL, artifact_key);
+}
+
 static void apply_new_wifi_config(const frame_settings_t *settings) {
 	if (!settings_store_save(settings)) {
 		ESP_LOGE(TAG, "failed to persist settings");
@@ -32,10 +56,12 @@ static void apply_new_wifi_config(const frame_settings_t *settings) {
 
 static bool render_from_artifact_key(const char *artifact_key) {
 	char url[320];
-	snprintf(url, sizeof(url), "%s/%s", FRAME_BASE_URL, artifact_key);
+	build_artifact_url(url, sizeof(url), artifact_key);
+	ESP_LOGI(TAG, "display update artifact=%s url=%s", artifact_key, url);
 
 	frame_payload_t payload = {0};
 	if (!frame_fetcher_download(url, &payload)) {
+		ESP_LOGE(TAG, "frame download failed for artifact=%s", artifact_key);
 		return false;
 	}
 
@@ -68,6 +94,7 @@ static void ws_message_handler(const char *payload, int payload_len) {
 	char json[1024] = {0};
 	int copy_len = payload_len < (int)sizeof(json) - 1 ? payload_len : (int)sizeof(json) - 1;
 	memcpy(json, payload, copy_len);
+	ESP_LOGI(TAG, "ws payload len=%d body=%s", payload_len, json);
 
 	cJSON *root = cJSON_Parse(json);
 	if (root == NULL) {
@@ -125,6 +152,7 @@ void app_main(void) {
 	ESP_ERROR_CHECK(wifi_manager_wait_until_ready(20000) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, s_settings.device_id, ws_message_handler) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);
+	ESP_LOGI(TAG, "connected to websocket as deviceId=%s", s_settings.device_id);
 
 	xTaskCreate(refresh_task, "refresh_task", 4096, NULL, 5, NULL);
 }
