@@ -10,20 +10,48 @@ This firmware replaces the Raspberry Pi `update-service` runtime.
 - Storage: only settings in NVS (Wi-Fi, refresh interval, device ID)
 - Offline behavior: no frame history, no download queue, no persistent image cache
 
-## Build
+## XIAO ESP32-S3 Build Guide
+
+### 1) Wire the e-paper module
+
+Suggested wiring for Seeed Studio XIAO ESP32-S3:
+
+- `VCC` -> `3V3` (or module-required supply voltage)
+- `GND` -> `GND`
+- `SCLK` -> `GPIO12`
+- `DIN` -> `GPIO11`
+- `CS` -> `GPIO10`
+- `DC` -> `GPIO9`
+- `RST` -> `GPIO8`
+- `BUSY` -> `GPIO7`
+
+### 2) Build and flash
 
 ```bash
+# one-time per shell
+. ~/esp/esp-idf/export.sh
+
 cd esp32-firmware
 idf.py set-target esp32s3
 idf.py menuconfig
 idf.py build
-idf.py -p /dev/ttyUSB0 flash monitor
+idf.py -p /dev/ttyACM0 flash
 ```
 
 Set these values in `menuconfig`:
 
 - `PictureFrame settings -> WebSocket base URL`
 - `PictureFrame settings -> Frame asset base URL`
+
+### 3) Optional: watch boot logs
+
+```bash
+. ~/esp/esp-idf/export.sh
+cd esp32-firmware
+idf.py -p /dev/ttyACM0 monitor
+```
+
+If your board enumerates as `/dev/ttyUSB0` instead, replace the port accordingly.
 
 ## Protocol
 

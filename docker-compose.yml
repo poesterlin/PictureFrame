@@ -7,7 +7,7 @@ services:
       - PORT=3000
       - FRAMES_DIR=/app/data/frames
     volumes:
-      - frame_data:/app/data/frames
+      - ./frame_data:/app/data/frames
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`frame.oesterlin.dev`)"
@@ -18,6 +18,3 @@ services:
 networks:
   traefik_web:
     external: true
-
-volumes:
-  frame_data:
