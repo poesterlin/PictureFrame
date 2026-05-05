@@ -138,7 +138,14 @@ static void refresh_task(void *arg) {
 void app_main(void) {
 	ESP_LOGI(TAG, "starting picture frame firmware");
 
-	ESP_ERROR_CHECK(display_driver_init() ? ESP_OK : ESP_FAIL);
+	bool display_ready = display_driver_init();
+	if (!display_ready) {
+		ESP_LOGE(TAG, "display init failed, continuing without panel output");
+	} else {
+		if (!display_driver_render_checkerboard()) {
+			ESP_LOGW(TAG, "startup checkerboard render failed");
+		}
+	}
 	ESP_ERROR_CHECK(settings_store_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(settings_store_load(&s_settings) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(wifi_manager_init() ? ESP_OK : ESP_FAIL);
@@ -152,6 +159,9 @@ void app_main(void) {
 	ESP_ERROR_CHECK(wifi_manager_connect(s_settings.wifi_ssid, s_settings.wifi_password) ? ESP_OK : ESP_FAIL);
 	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
+		if (display_ready && !display_driver_render_checkerboard()) {
+			ESP_LOGW(TAG, "timeout checkerboard render failed");
+		}
 	}
 	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, s_settings.device_id, ws_message_handler) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);

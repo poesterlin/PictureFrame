@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -27,6 +28,8 @@ static const gpio_num_t PIN_BUSY = GPIO_NUM_7;
 static spi_device_handle_t s_spi;
 static bool s_bus_ready;
 static uint8_t *s_panel_buffer;
+static int s_busy_idle_level = 1;
+static bool s_use_timed_busy_fallback = false;
 
 static bool gpio_write(gpio_num_t pin, uint32_t level) {
 	return gpio_set_level(pin, (int)level) == ESP_OK;
@@ -65,25 +68,32 @@ static bool epd_send_data_byte(uint8_t value) {
 }
 
 static bool epd_send_data_buffer(const uint8_t *buffer, size_t len) {
-	if (!gpio_write(PIN_DC, 1) || !gpio_write(PIN_CS, 0)) {
-		return false;
+	// Keep command/data write timing and CS strobes close to Waveshare reference driver.
+	for (size_t i = 0; i < len; i++) {
+		if (!epd_send_data_byte(buffer[i])) {
+			return false;
+		}
 	}
-	bool ok = epd_spi_write(buffer, len);
-	if (!gpio_write(PIN_CS, 1)) {
-		return false;
-	}
-	return ok;
+	return true;
 }
 
-static bool epd_wait_busy_high(void) {
-	// Panel reports LOW while busy, HIGH when idle.
+static bool epd_wait_busy_idle_level(void) {
+	if (s_use_timed_busy_fallback) {
+		vTaskDelay(pdMS_TO_TICKS(200));
+		return true;
+	}
 	const int max_wait_ms = 30000;
 	int waited = 0;
-	while (gpio_get_level(PIN_BUSY) == 0) {
+	while (gpio_get_level(PIN_BUSY) != s_busy_idle_level) {
 		vTaskDelay(pdMS_TO_TICKS(1));
 		waited += 1;
 		if (waited >= max_wait_ms) {
-			ESP_LOGE(TAG, "busy wait timed out");
+			ESP_LOGE(
+				TAG,
+				"busy wait timed out (idle_level=%d current_level=%d)",
+				s_busy_idle_level,
+				gpio_get_level(PIN_BUSY)
+			);
 			return false;
 		}
 	}
@@ -107,20 +117,48 @@ static bool epd_reset(void) {
 }
 
 static bool epd_turn_on_display(void) {
-	if (!epd_send_command(0x04) || !epd_wait_busy_high()) {
+	if (!epd_send_command(0x04)) {
 		return false;
 	}
-	if (!epd_send_command(0x12) || !epd_send_data_byte(0x00) || !epd_wait_busy_high()) {
+	if (s_use_timed_busy_fallback) {
+		// Panel power-on and refresh can take several seconds; fixed delays are safer when BUSY is unreliable.
+		vTaskDelay(pdMS_TO_TICKS(250));
+	} else if (!epd_wait_busy_idle_level()) {
 		return false;
 	}
-	if (!epd_send_command(0x02) || !epd_send_data_byte(0x00) || !epd_wait_busy_high()) {
+
+	if (!epd_send_command(0x12) || !epd_send_data_byte(0x00)) {
+		return false;
+	}
+	if (s_use_timed_busy_fallback) {
+		vTaskDelay(pdMS_TO_TICKS(18000));
+	} else if (!epd_wait_busy_idle_level()) {
+		return false;
+	}
+
+	if (!epd_send_command(0x02) || !epd_send_data_byte(0x00)) {
+		return false;
+	}
+	if (s_use_timed_busy_fallback) {
+		vTaskDelay(pdMS_TO_TICKS(250));
+	} else if (!epd_wait_busy_idle_level()) {
 		return false;
 	}
 	return true;
 }
 
-static bool epd_init_sequence(void) {
-	if (!epd_reset() || !epd_wait_busy_high()) {
+static bool epd_init_sequence_once(void) {
+	ESP_LOGI(
+		TAG,
+		"panel init with busy idle level=%d (busy pin before reset=%d)",
+		s_busy_idle_level,
+		gpio_get_level(PIN_BUSY)
+	);
+	if (!epd_reset()) {
+		return false;
+	}
+	ESP_LOGI(TAG, "busy pin after reset=%d", gpio_get_level(PIN_BUSY));
+	if (!epd_wait_busy_idle_level()) {
 		return false;
 	}
 	vTaskDelay(pdMS_TO_TICKS(30));
@@ -194,6 +232,41 @@ static bool epd_init_sequence(void) {
 	return true;
 }
 
+static bool epd_init_sequence(void) {
+	if (epd_init_sequence_once()) {
+		return true;
+	}
+
+	// If BUSY line is miswired/stuck, continue with conservative fixed delays.
+	s_use_timed_busy_fallback = true;
+	s_busy_idle_level = 1;
+	ESP_LOGW(TAG, "retrying panel init using timed busy fallback");
+	return epd_init_sequence_once();
+}
+
+static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t width, uint16_t height) {
+	if (!epd_init_sequence()) {
+		ESP_LOGE(TAG, "panel init failed before display");
+		return false;
+	}
+	if (!epd_send_command(0x10)) {
+		ESP_LOGE(TAG, "failed to start frame write");
+		return false;
+	}
+	for (uint16_t row = 0; row < height; row++) {
+		const uint8_t *row_ptr = packed_buffer + ((size_t)row * (width / 2));
+		if (!epd_send_data_buffer(row_ptr, width / 2)) {
+			ESP_LOGE(TAG, "failed writing frame row %u", (unsigned)row);
+			return false;
+		}
+	}
+	if (!epd_turn_on_display()) {
+		ESP_LOGE(TAG, "display refresh failed");
+		return false;
+	}
+	return true;
+}
+
 static uint8_t normalize_color(uint8_t value) {
 	// Keep compatibility with old GUI_ReadBmp_RGB_7Color behavior.
 	return value >= 7 ? 1 : value;
@@ -218,7 +291,8 @@ bool display_driver_init(void) {
 	const gpio_config_t in_cfg = {
 		.pin_bit_mask = (1ULL << PIN_BUSY),
 		.mode = GPIO_MODE_INPUT,
-		.pull_up_en = GPIO_PULLUP_DISABLE,
+		// Some Waveshare-compatible boards expose BUSY as open-drain and require a pull-up.
+		.pull_up_en = GPIO_PULLUP_ENABLE,
 		.pull_down_en = GPIO_PULLDOWN_DISABLE,
 		.intr_type = GPIO_INTR_DISABLE
 	};
@@ -245,7 +319,8 @@ bool display_driver_init(void) {
 	}
 	spi_device_interface_config_t dev_cfg = {
 		.mode = 0,
-		.clock_speed_hz = 10 * 1000 * 1000,
+		// Use a conservative SPI clock for wiring/switch-board tolerance during bring-up.
+		.clock_speed_hz = 2 * 1000 * 1000,
 		.spics_io_num = -1, // software-controlled CS
 		.queue_size = 1
 	};
@@ -254,9 +329,9 @@ bool display_driver_init(void) {
 		return false;
 	}
 
-	s_panel_buffer = (uint8_t *)malloc(PANEL_BUFFER_SIZE);
+	s_panel_buffer = (uint8_t *)heap_caps_malloc(PANEL_BUFFER_SIZE, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
 	if (s_panel_buffer == NULL) {
-		ESP_LOGE(TAG, "failed to allocate panel buffer");
+		ESP_LOGE(TAG, "failed to allocate DMA-capable panel buffer");
 		return false;
 	}
 
@@ -308,26 +383,37 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		}
 	}
 
-	if (!epd_init_sequence()) {
-		ESP_LOGE(TAG, "panel init failed before display");
-		return false;
-	}
-	if (!epd_send_command(0x10)) {
-		ESP_LOGE(TAG, "failed to start frame write");
-		return false;
-	}
-	for (uint16_t row = 0; row < height; row++) {
-		const uint8_t *row_ptr = s_panel_buffer + ((size_t)row * (width / 2));
-		if (!epd_send_data_buffer(row_ptr, width / 2)) {
-			ESP_LOGE(TAG, "failed writing frame row %u", (unsigned)row);
-			return false;
-		}
-	}
-	if (!epd_turn_on_display()) {
-		ESP_LOGE(TAG, "display refresh failed");
+	if (!epd_display_packed_buffer(s_panel_buffer, width, height)) {
 		return false;
 	}
 
 	ESP_LOGI(TAG, "rendered frame %ux%u (%u pixels)", width, height, (unsigned)pixel_count);
+	return true;
+}
+
+bool display_driver_render_checkerboard(void) {
+	if (!s_bus_ready || s_panel_buffer == NULL) {
+		ESP_LOGW(TAG, "checkerboard skipped (display not ready)");
+		return false;
+	}
+
+	const uint16_t tile = 40;
+	const uint8_t color_a = 0; // black
+	const uint8_t color_b = 1; // white
+
+	for (uint16_t y = 0; y < PANEL_HEIGHT; y++) {
+		size_t dst_row = (size_t)y * (PANEL_WIDTH / 2);
+		for (uint16_t x = 0; x < PANEL_WIDTH; x += 2) {
+			uint8_t left = ((((x / tile) + (y / tile)) & 1) == 0) ? color_a : color_b;
+			uint16_t right_x = (uint16_t)(x + 1);
+			uint8_t right = ((((right_x / tile) + (y / tile)) & 1) == 0) ? color_a : color_b;
+			s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
+		}
+	}
+
+	if (!epd_display_packed_buffer(s_panel_buffer, PANEL_WIDTH, PANEL_HEIGHT)) {
+		return false;
+	}
+	ESP_LOGI(TAG, "rendered offline checkerboard");
 	return true;
 }
