@@ -8,6 +8,7 @@ const FRAME_HEIGHT = 480;
 const FRAME_PIXEL_COUNT = FRAME_WIDTH * FRAME_HEIGHT;
 const PF7A_HEADER_SIZE = 8;
 
+/** @param {string | undefined | null} input */
 function safeSegment(input) {
 	return (input || 'default').replace(/[^a-zA-Z0-9-_]/g, '_');
 }
@@ -20,6 +21,12 @@ export async function ensureFramesDir() {
 	await fs.mkdir(getFramesDir(), { recursive: true });
 }
 
+/**
+ * @param {string | undefined | null} name
+ * @param {string} requestId
+ * @param {Buffer | Uint8Array | string} textPayload
+ * @param {Buffer | Uint8Array} framePayload
+ */
 export async function storeFrameArtifacts(name, requestId, textPayload, framePayload) {
 	const owner = safeSegment(name);
 	const fileId = safeSegment(requestId);
@@ -40,10 +47,12 @@ export async function storeFrameArtifacts(name, requestId, textPayload, framePay
 	};
 }
 
+/** @param {Buffer} payload */
 function hasPf7aHeader(payload) {
 	return payload.length >= PF7A_HEADER_SIZE && payload.subarray(0, 4).equals(PF7A_MAGIC);
 }
 
+/** @param {Buffer} payload */
 function isValidPf7a(payload) {
 	if (!hasPf7aHeader(payload)) {
 		return false;
@@ -53,10 +62,12 @@ function isValidPf7a(payload) {
 	return width === FRAME_WIDTH && height === FRAME_HEIGHT && payload.length === PF7A_HEADER_SIZE + FRAME_PIXEL_COUNT;
 }
 
+/** @param {Buffer} payload */
 function isLegacyIndexedFrame(payload) {
 	return payload.length === FRAME_PIXEL_COUNT && payload.every((value) => value < 7);
 }
 
+/** @param {Buffer} payload */
 function encodePf7a(payload) {
 	const header = Buffer.from([
 		PF7A_MAGIC[0],
@@ -71,6 +82,10 @@ function encodePf7a(payload) {
 	return Buffer.concat([header, payload]);
 }
 
+/**
+ * @param {Buffer} payload
+ * @returns {Buffer | null}
+ */
 export function normalizeFrameArtifactPayload(payload) {
 	if (isValidPf7a(payload)) {
 		return payload;
@@ -81,6 +96,10 @@ export function normalizeFrameArtifactPayload(payload) {
 	return null;
 }
 
+/**
+ * @param {string} filePath
+ * @returns {Promise<Buffer | null>}
+ */
 export async function ensureFrameArtifactFile(filePath) {
 	const payload = await fs.readFile(filePath);
 	const normalized = normalizeFrameArtifactPayload(payload);
@@ -93,6 +112,10 @@ export async function ensureFrameArtifactFile(filePath) {
 	return normalized;
 }
 
+/**
+ * @param {string} dir
+ * @returns {Promise<string[]>}
+ */
 async function walk(dir) {
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	const files = await Promise.all(
@@ -111,6 +134,7 @@ export async function listArtifactKeys() {
 	await ensureFramesDir();
 	const files = await walk(getFramesDir());
 	const artifactFiles = files.filter((filePath) => filePath.toLowerCase().endsWith('.pf7a'));
+	/** @type {string[]} */
 	const validFiles = [];
 	for (const filePath of artifactFiles) {
 		try {
@@ -118,7 +142,8 @@ export async function listArtifactKeys() {
 				validFiles.push(filePath);
 			}
 		} catch (error) {
-			console.warn('skipping invalid frame artifact', filePath, error?.message ?? error);
+			const message = error instanceof Error ? error.message : error;
+			console.warn('skipping invalid frame artifact', filePath, message);
 		}
 	}
 	return validFiles.map((filePath) => {
@@ -135,6 +160,7 @@ export async function pickRandomArtifactKey() {
 	return keys[Math.floor(Math.random() * keys.length)];
 }
 
+/** @param {string} requestPathname */
 export function resolveFrameAbsolutePath(requestPathname) {
 	const normalized = requestPathname.startsWith('/') ? requestPathname.slice(1) : requestPathname;
 	if (!normalized.startsWith('frames/')) {
@@ -149,6 +175,7 @@ export function resolveFrameAbsolutePath(requestPathname) {
 	return full;
 }
 
+/** @param {string} key */
 export async function deleteFrameByKey(key) {
 	const full = resolveFrameAbsolutePath(key);
 	if (!full) {
