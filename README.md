@@ -11,21 +11,16 @@ To run the frontend you need to have nodejs installed.
 Configure the environment variables in the `.env` file then run the following commands.
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Build and run self-hosted Node server:
 
 ```bash
-npm run build
-npm run start
+bun run build
+bun run start
 ```
-
-Environment variables:
-
-- `PORT` (optional, default `3000` for self-hosted server)
-- `FRAMES_DIR` (optional, default `<repo>/data/frames`)
 
 ## ESP32-S3 Firmware
 
