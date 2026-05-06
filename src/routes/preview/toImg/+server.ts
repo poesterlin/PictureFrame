@@ -1,8 +1,11 @@
 import { dev } from '$app/environment';
 import { error, type RequestHandler } from '@sveltejs/kit';
 import Jimp from 'jimp';
-import { promises as fs } from 'node:fs';
-import { decodeFrameArtifactPayload, resolveFrameAbsolutePath } from '../../../../realtime/frame-storage.js';
+import {
+	decodeFrameArtifactPayload,
+	ensureFrameArtifactFile,
+	resolveFrameAbsolutePath
+} from '../../../../realtime/frame-storage.js';
 
 const PANEL_WIDTH = 800;
 const PANEL_HEIGHT = 480;
@@ -59,15 +62,14 @@ export const GET: RequestHandler = async ({ url }) => {
 		throw error(400, 'invalid key');
 	}
 
-	let array = await fs.readFile(filePath);
-	if (key.toLowerCase().endsWith('.pf7a')) {
-		const decoded = decodeFrameArtifactPayload(array);
-		if (!decoded) {
-			throw error(400, 'invalid frame artifact file');
-		}
-		array = decoded;
-	} else {
-		throw error(400, 'unsupported artifact format');
+	const artifactPayload = await ensureFrameArtifactFile(filePath);
+	if (!artifactPayload) {
+		throw error(400, 'invalid frame artifact file');
+	}
+
+	const array = decodeFrameArtifactPayload(artifactPayload);
+	if (!array) {
+		throw error(400, 'invalid frame artifact file');
 	}
 
 	if (array.length !== expectedPayloadLength()) {

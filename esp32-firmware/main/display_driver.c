@@ -16,7 +16,6 @@
 static const char *TAG = "display_driver";
 enum { HEADER_SIZE = 8 };
 static const char MAGIC_RAW[] = {'P', 'F', '7', 'A'};
-static const char MAGIC_RLE[] = {'P', 'F', '7', 'C'};
 static const uint16_t PANEL_WIDTH = 800;
 static const uint16_t PANEL_HEIGHT = 480;
 static const size_t PANEL_BUFFER_SIZE = (PANEL_WIDTH / 2) * PANEL_HEIGHT;
@@ -49,11 +48,6 @@ typedef struct {
 	size_t pixels_written;
 	uint16_t width;
 	uint16_t height;
-	bool compressed;
-	bool rle_ctrl_active;
-	bool rle_repeat_mode;
-	bool rle_need_value;
-	size_t rle_remaining;
 	bool header_ok;
 	bool failed;
 } pf7a_stream_t;
@@ -388,51 +382,12 @@ static bool pf7a_stream_emit_pixel(pf7a_stream_t *state, uint8_t value) {
 	return true;
 }
 
-static bool pf7a_stream_consume_rle_byte(pf7a_stream_t *state, uint8_t byte) {
-	if (!state->rle_ctrl_active) {
-		state->rle_ctrl_active = true;
-		state->rle_repeat_mode = byte >= 128;
-		state->rle_need_value = state->rle_repeat_mode;
-		state->rle_remaining = state->rle_repeat_mode ? (size_t)(byte - 127) : (size_t)(byte + 1);
-		if (state->rle_remaining == 0) {
-			return false;
-		}
-		return true;
-	}
-
-	if (state->rle_repeat_mode) {
-		if (state->rle_need_value) {
-			state->rle_need_value = false;
-			for (size_t i = 0; i < state->rle_remaining; i++) {
-				if (!pf7a_stream_emit_pixel(state, byte)) {
-					return false;
-				}
-			}
-			state->rle_ctrl_active = false;
-			state->rle_remaining = 0;
-			return true;
-		}
-		return false;
-	}
-
-	if (!pf7a_stream_emit_pixel(state, byte)) {
-		return false;
-	}
-	state->rle_remaining--;
-	if (state->rle_remaining == 0) {
-		state->rle_ctrl_active = false;
-	}
-	return true;
-}
-
 static bool pf7a_stream_parse_header(pf7a_stream_t *state) {
 	bool is_raw = memcmp(state->header, MAGIC_RAW, sizeof(MAGIC_RAW)) == 0;
-	bool is_rle = memcmp(state->header, MAGIC_RLE, sizeof(MAGIC_RLE)) == 0;
-	if (!is_raw && !is_rle) {
+	if (!is_raw) {
 		ESP_LOGE(TAG, "invalid frame magic");
 		return false;
 	}
-	state->compressed = is_rle;
 	state->width = state->header[4] | ((uint16_t)state->header[5] << 8);
 	state->height = state->header[6] | ((uint16_t)state->header[7] << 8);
 	if (state->width != PANEL_WIDTH || state->height != PANEL_HEIGHT) {
@@ -466,11 +421,7 @@ static esp_err_t pf7a_http_event_handler(esp_http_client_event_t *evt) {
 			state->failed = true;
 			return ESP_FAIL;
 		}
-		if (!state->compressed && !pf7a_stream_emit_pixel(state, data[i])) {
-			state->failed = true;
-			return ESP_FAIL;
-		}
-		if (state->compressed && !pf7a_stream_consume_rle_byte(state, data[i])) {
+		if (!pf7a_stream_emit_pixel(state, data[i])) {
 			state->failed = true;
 			return ESP_FAIL;
 		}
@@ -571,8 +522,7 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		return false;
 	}
 	bool is_raw = memcmp(payload, MAGIC_RAW, sizeof(MAGIC_RAW)) == 0;
-	bool is_rle = memcmp(payload, MAGIC_RLE, sizeof(MAGIC_RLE)) == 0;
-	if (!is_raw && !is_rle) {
+	if (!is_raw) {
 		ESP_LOGE(TAG, "invalid frame magic");
 		return false;
 	}
@@ -587,72 +537,17 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		return false;
 	}
 	const size_t pixel_count = (size_t)width * (size_t)height;
-	if (is_raw) {
-		if (encoded_len != pixel_count) {
-			ESP_LOGE(TAG, "invalid raw frame size");
-			return false;
-		}
-		for (uint16_t y = 0; y < height; y++) {
-			size_t src_row = (size_t)y * width;
-			size_t dst_row = (size_t)y * (width / 2);
-			for (uint16_t x = 0; x < width; x += 2) {
-				uint8_t left = normalize_color(pixels[src_row + x]);
-				uint8_t right = normalize_color(pixels[src_row + x + 1]);
-				s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
-			}
-		}
-	} else {
-		memset(s_panel_buffer, 0, PANEL_BUFFER_SIZE);
-		size_t written = 0;
-		size_t i = 0;
-		while (i < encoded_len) {
-			uint8_t control = pixels[i++];
-			size_t run = control >= 128 ? (size_t)(control - 127) : (size_t)(control + 1);
-			if (control >= 128) {
-				if (i >= encoded_len) {
-					ESP_LOGE(TAG, "truncated RLE frame");
-					return false;
-				}
-				uint8_t value = pixels[i++];
-				for (size_t j = 0; j < run; j++) {
-					if (written >= pixel_count) {
-						ESP_LOGE(TAG, "RLE frame overflow");
-						return false;
-					}
-					uint8_t color = normalize_color(value);
-					uint8_t *packed = &s_panel_buffer[written / 2];
-					if ((written & 1) == 0) {
-						*packed = (uint8_t)((color << 4) | (*packed & 0x0F));
-					} else {
-						*packed = (uint8_t)((*packed & 0xF0) | color);
-					}
-					written++;
-				}
-			} else {
-				if (i + run > encoded_len) {
-					ESP_LOGE(TAG, "truncated RLE literal frame");
-					return false;
-				}
-				for (size_t j = 0; j < run; j++) {
-					if (written >= pixel_count) {
-						ESP_LOGE(TAG, "RLE frame overflow");
-						return false;
-					}
-					uint8_t color = normalize_color(pixels[i + j]);
-					uint8_t *packed = &s_panel_buffer[written / 2];
-					if ((written & 1) == 0) {
-						*packed = (uint8_t)((color << 4) | (*packed & 0x0F));
-					} else {
-						*packed = (uint8_t)((*packed & 0xF0) | color);
-					}
-					written++;
-				}
-				i += run;
-			}
-		}
-		if (written != pixel_count) {
-			ESP_LOGE(TAG, "invalid RLE frame size");
-			return false;
+	if (encoded_len != pixel_count) {
+		ESP_LOGE(TAG, "invalid raw frame size");
+		return false;
+	}
+	for (uint16_t y = 0; y < height; y++) {
+		size_t src_row = (size_t)y * width;
+		size_t dst_row = (size_t)y * (width / 2);
+		for (uint16_t x = 0; x < width; x += 2) {
+			uint8_t left = normalize_color(pixels[src_row + x]);
+			uint8_t right = normalize_color(pixels[src_row + x + 1]);
+			s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
 		}
 	}
 
@@ -732,10 +627,6 @@ bool display_driver_render_pf7a_url(const char *url) {
 	}
 	if (state.failed || state.pixels_written != (size_t)PANEL_WIDTH * PANEL_HEIGHT) {
 		ESP_LOGE(TAG, "invalid streamed frame pixels: %u", (unsigned)state.pixels_written);
-		return false;
-	}
-	if (state.compressed && state.rle_ctrl_active) {
-		ESP_LOGE(TAG, "truncated streamed RLE frame");
 		return false;
 	}
 

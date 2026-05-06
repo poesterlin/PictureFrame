@@ -41,19 +41,13 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 		try {
-			const payload = absolutePath.endsWith('.pf7a')
-				? await ensureFrameArtifactFile(absolutePath)
-				: await fs.readFile(absolutePath);
+			const payload = await ensureFrameArtifactFile(absolutePath);
 			if (!payload) {
 				res.statusCode = 400;
 				res.end('invalid frame artifact');
 				return;
 			}
-			if (absolutePath.endsWith('.pf7a')) {
-				res.setHeader('content-type', 'application/octet-stream');
-			} else if (absolutePath.endsWith('.txt')) {
-				res.setHeader('content-type', 'text/plain; charset=utf-8');
-			}
+			res.setHeader('content-type', 'application/octet-stream');
 			res.statusCode = 200;
 			res.end(payload);
 			return;
