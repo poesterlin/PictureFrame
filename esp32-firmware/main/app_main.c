@@ -141,10 +141,6 @@ void app_main(void) {
 	bool display_ready = display_driver_init();
 	if (!display_ready) {
 		ESP_LOGE(TAG, "display init failed, continuing without panel output");
-	} else {
-		if (!display_driver_render_checkerboard()) {
-			ESP_LOGW(TAG, "startup checkerboard render failed");
-		}
 	}
 	ESP_ERROR_CHECK(settings_store_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(settings_store_load(&s_settings) ? ESP_OK : ESP_FAIL);
