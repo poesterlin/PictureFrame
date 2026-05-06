@@ -176,7 +176,7 @@ test('decodes legacy packbits-style pf7c payloads', () => {
 	assert.equal(decoded[1], 3);
 });
 
-test('lenient pf7c decode accepts slight output overflow', () => {
+test('rejects pf7c payload with size overflow', () => {
 	const body = Buffer.alloc((PIXELS / 128) * 2 + 2);
 	for (let i = 0; i < body.length - 2; i += 2) {
 		body[i] = 255;
@@ -187,8 +187,5 @@ test('lenient pf7c decode accepts slight output overflow', () => {
 
 	const payload = Buffer.concat([HEADER_RLE, body]);
 	const decoded = decodeFrameArtifactPayload(payload);
-	assert.ok(decoded);
-	assert.equal(decoded.length, PIXELS);
-	assert.equal(decoded[0], 4);
-	assert.equal(decoded[1], 4);
+	assert.equal(decoded, null);
 });

@@ -382,20 +382,6 @@ export function decodeFrameArtifactPayload(payload) {
 		return decodePackedNibbles(packedPixels);
 	}
 
-	const indexedPixelsLenient = decodePf7cAnyStrategyLenient(encoded, FRAME_PIXEL_COUNT, normalizePaletteIndex);
-	if (indexedPixelsLenient) {
-		return indexedPixelsLenient;
-	}
-
-	const packedPixelsLenient = decodePf7cAnyStrategyLenient(
-		encoded,
-		FRAME_PACKED_PIXEL_BYTES,
-		(value) => value
-	);
-	if (packedPixelsLenient) {
-		return decodePackedNibbles(packedPixelsLenient);
-	}
-
 	return null;
 }
 
