@@ -106,6 +106,28 @@ function isLegacyIndexedFrame(payload) {
 }
 
 /** @param {Buffer} payload */
+function isLegacyPackedIndexedFrame(payload) {
+	return payload.length === FRAME_PACKED_PIXEL_BYTES;
+}
+
+/** @param {Buffer} payload */
+function decodePackedNibbles(payload) {
+	const out = Buffer.alloc(payload.length * 2);
+	let outPos = 0;
+	for (let i = 0; i < payload.length; i++) {
+		const byte = payload[i];
+		const hi = (byte >> 4) & 0x0f;
+		const lo = byte & 0x0f;
+		if (hi >= 16 || lo >= 16) {
+			return null;
+		}
+		out[outPos++] = hi;
+		out[outPos++] = lo;
+	}
+	return out;
+}
+
+/** @param {Buffer} payload */
 function encodePf7c(payload) {
 	const header = Buffer.from([
 		PF7C_MAGIC[0],
@@ -163,14 +185,7 @@ export function decodeFrameArtifactPayload(payload) {
 	}
 	if (isPackedPf7a(payload)) {
 		const packed = payload.subarray(PF7A_HEADER_SIZE);
-		const out = Buffer.alloc(FRAME_PIXEL_COUNT);
-		let outPos = 0;
-		for (let i = 0; i < packed.length; i++) {
-			const byte = packed[i];
-			out[outPos++] = (byte >> 4) & 0x0f;
-			out[outPos++] = byte & 0x0f;
-		}
-		return out;
+		return decodePackedNibbles(packed);
 	}
 	if (!payload.subarray(0, 4).equals(PF7C_MAGIC)) {
 		return null;
@@ -227,6 +242,15 @@ export function normalizeFrameArtifactPayload(payload) {
 	if (isLegacyIndexedFrame(payload)) {
 		const raw = encodePf7a(payload);
 		const compressed = encodePf7c(payload);
+		return compressed.length <= raw.length ? compressed : raw;
+	}
+	if (isLegacyPackedIndexedFrame(payload)) {
+		const decoded = decodePackedNibbles(payload);
+		if (!decoded) {
+			return null;
+		}
+		const raw = encodePf7a(decoded);
+		const compressed = encodePf7c(decoded);
 		return compressed.length <= raw.length ? compressed : raw;
 	}
 	return null;

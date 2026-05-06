@@ -41,6 +41,19 @@ test('decodes nibble-packed pf7a payloads', () => {
 	assert.equal(decoded[3], 4);
 });
 
+test('converts legacy nibble-packed payloads without header', () => {
+	const legacyPacked = Buffer.alloc(PIXELS / 2, 0x56);
+	const normalized = normalizeFrameArtifactPayload(legacyPacked);
+	assert.ok(normalized);
+	const decoded = decodeFrameArtifactPayload(normalized);
+	assert.ok(decoded);
+	assert.equal(decoded.length, PIXELS);
+	assert.equal(decoded[0], 5);
+	assert.equal(decoded[1], 6);
+	assert.equal(decoded[2], 5);
+	assert.equal(decoded[3], 6);
+});
+
 test('converts renamed legacy indexed payloads', () => {
 	const legacy = Buffer.alloc(PIXELS, 2);
 	const normalized = normalizeFrameArtifactPayload(legacy);
