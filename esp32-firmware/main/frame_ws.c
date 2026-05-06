@@ -5,6 +5,7 @@
 
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_crt_bundle.h"
 #include "esp_websocket_client.h"
 #include "freertos/FreeRTOS.h"
 
@@ -49,7 +50,8 @@ bool frame_ws_init(const char *base_ws_url, const char *device_id, ws_message_ha
 	snprintf(s_ws_url, sizeof(s_ws_url), "%s?deviceId=%s", base_ws_url, device_id);
 
 	esp_websocket_client_config_t websocket_cfg = {
-		.uri = s_ws_url
+		.uri = s_ws_url,
+		.crt_bundle_attach = esp_crt_bundle_attach
 	};
 	s_client = esp_websocket_client_init(&websocket_cfg);
 	if (s_client == NULL) {
