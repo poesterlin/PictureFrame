@@ -60,27 +60,14 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	let array = await fs.readFile(filePath);
-	if (key.toLowerCase().endsWith('.pf7a') || key.toLowerCase().endsWith('.pf7c')) {
+	if (key.toLowerCase().endsWith('.pf7a')) {
 		const decoded = decodeFrameArtifactPayload(array);
 		if (!decoded) {
 			throw error(400, 'invalid frame artifact file');
 		}
 		array = decoded;
-	} else if (key.toLowerCase().endsWith('.txt')) {
-		if (array.length !== PANEL_WIDTH * PANEL_HEIGHT && array.length !== (PANEL_WIDTH * PANEL_HEIGHT) / 2) {
-			throw error(400, 'invalid legacy txt frame size');
-		}
-
-		if (array.length === (PANEL_WIDTH * PANEL_HEIGHT) / 2) {
-			const decoded = Buffer.alloc(PANEL_WIDTH * PANEL_HEIGHT);
-			let outPos = 0;
-			for (let i = 0; i < array.length; i++) {
-				const packed = array[i];
-				decoded[outPos++] = (packed >> 4) & 0x0f;
-				decoded[outPos++] = packed & 0x0f;
-			}
-			array = decoded;
-		}
+	} else {
+		throw error(400, 'unsupported artifact format');
 	}
 
 	if (array.length !== expectedPayloadLength()) {

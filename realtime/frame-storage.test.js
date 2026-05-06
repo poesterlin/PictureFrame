@@ -98,7 +98,7 @@ test('decodes valid pf7c payloads', () => {
 	assert.equal(decoded[3], 1);
 });
 
-test('listArtifactKeys includes pf7a and pf7c files', async () => {
+test('listArtifactKeys migrates to latest .pf7a format', async () => {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pf7-list-'));
 	const previousFramesDir = process.env.FRAMES_DIR;
 	process.env.FRAMES_DIR = dir;
@@ -119,7 +119,7 @@ test('listArtifactKeys includes pf7a and pf7c files', async () => {
 
 		const keys = await listArtifactKeys();
 		assert.ok(keys.includes('frames/tester/a.pf7a'));
-		assert.ok(keys.includes('frames/tester/b.pf7c'));
+		assert.ok(keys.includes('frames/tester/b.pf7a'));
 	} finally {
 		if (previousFramesDir === undefined) {
 			delete process.env.FRAMES_DIR;

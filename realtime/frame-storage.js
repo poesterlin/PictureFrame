@@ -410,27 +410,28 @@ export function decodeFrameArtifactPayload(payload) {
 export function normalizeFrameArtifactPayload(payload) {
 	const decoded = decodeFrameArtifactPayload(payload);
 	if (decoded) {
-		const compressed = encodePf7c(decoded);
-		if (compressed.length <= payload.length) {
-			return compressed;
-		}
-		return payload;
+		return encodePf7c(decoded);
 	}
 	if (isLegacyIndexedFrame(payload)) {
-		const raw = encodePf7a(payload);
-		const compressed = encodePf7c(payload);
-		return compressed.length <= raw.length ? compressed : raw;
+		return encodePf7c(payload);
 	}
 	if (isLegacyPackedIndexedFrame(payload)) {
 		const decoded = decodePackedNibbles(payload);
 		if (!decoded) {
 			return null;
 		}
-		const raw = encodePf7a(decoded);
-		const compressed = encodePf7c(decoded);
-		return compressed.length <= raw.length ? compressed : raw;
+		return encodePf7c(decoded);
 	}
 	return null;
+}
+
+/** @param {string} filePath */
+function toLatestArtifactPath(filePath) {
+	const lower = filePath.toLowerCase();
+	if (lower.endsWith('.txt') || lower.endsWith('.pf7c')) {
+		return filePath.replace(/\.[^./]+$/i, '.pf7a');
+	}
+	return filePath;
 }
 
 /**
@@ -443,8 +444,13 @@ export async function ensureFrameArtifactFile(filePath) {
 	if (!normalized) {
 		return null;
 	}
-	if (normalized !== payload) {
-		await fs.writeFile(filePath, normalized);
+	const targetPath = toLatestArtifactPath(filePath);
+	const shouldWrite = normalized !== payload || targetPath !== filePath;
+	if (shouldWrite) {
+		await fs.writeFile(targetPath, normalized);
+		if (targetPath !== filePath) {
+			await fs.rm(filePath, { force: true });
+		}
 	}
 	return normalized;
 }
@@ -475,8 +481,8 @@ export async function listArtifactKeys() {
 		const lower = filePath.toLowerCase();
 		let rank = 0;
 		if (lower.endsWith('.txt')) rank = 1;
-		if (lower.endsWith('.pf7a')) rank = 2;
-		if (lower.endsWith('.pf7c')) rank = 3;
+		if (lower.endsWith('.pf7c')) rank = 2;
+		if (lower.endsWith('.pf7a')) rank = 3;
 		if (rank === 0) continue;
 
 		const base = filePath.slice(0, filePath.lastIndexOf('.'));
@@ -488,10 +494,15 @@ export async function listArtifactKeys() {
 	const artifactFiles = Array.from(preferredByBase.values()).map((entry) => entry.filePath);
 	/** @type {string[]} */
 	const validFiles = [];
+	const seen = new Set();
 	for (const filePath of artifactFiles) {
 		try {
 			if (await ensureFrameArtifactFile(filePath)) {
-				validFiles.push(filePath);
+				const latestPath = toLatestArtifactPath(filePath);
+				if (!seen.has(latestPath)) {
+					seen.add(latestPath);
+					validFiles.push(latestPath);
+				}
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : error;
