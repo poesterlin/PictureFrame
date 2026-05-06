@@ -84,6 +84,14 @@ bool frame_ws_start(void) {
 	return esp_websocket_client_start(s_client) == ESP_OK;
 }
 
+bool frame_ws_stop(void) {
+	if (s_client == NULL) {
+		return false;
+	}
+	ESP_LOGI(TAG, "stopping websocket client");
+	return esp_websocket_client_stop(s_client) == ESP_OK;
+}
+
 bool frame_ws_send(const char *json_payload) {
 	if (s_client == NULL || !esp_websocket_client_is_connected(s_client)) {
 		ESP_LOGW(TAG, "websocket send dropped (not connected)");

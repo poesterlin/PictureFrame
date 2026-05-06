@@ -14,16 +14,16 @@ This firmware replaces the Raspberry Pi `update-service` runtime.
 
 ### 1) Wire the e-paper module
 
-Current wiring for the XIAO ESP32-C6 e-paper breakout:
+Current wiring for the XIAO ESP32-C6 e-paper breakout (silkscreen label -> ESP32 GPIO):
 
 - `VCC` -> `3V3` (or module-required supply voltage)
 - `GND` -> `GND`
-- `SCLK` -> `GPIO7`
-- `DIN` -> `GPIO9`
-- `CS` -> `GPIO2`
-- `DC` -> `GPIO4`
-- `RST` -> `GPIO1`
-- `BUSY` -> `GPIO6`
+- `SCLK` -> `D8`  (GPIO19)
+- `DIN`  -> `D10` (GPIO18)
+- `CS`   -> `D1`  (GPIO1)
+- `DC`   -> `D3`  (GPIO21)
+- `RST`  -> `D0`  (GPIO0)
+- `BUSY` -> `D5`  (GPIO23)
 
 Use the display/HAT in **4-line SPI** mode. The legacy Raspberry Pi driver uses separate SPI data plus `CS`, `DC`, `RST`, and `BUSY` control lines; 3-line SPI is not compatible with this firmware wiring.
 

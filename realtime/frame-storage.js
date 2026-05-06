@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const DEFAULT_FRAMES_DIR = path.join(process.cwd(), 'data', 'frames');
 const PF7A_MAGIC = Buffer.from('PF7A');
+const PF7C_MAGIC = Buffer.from('PF7C');
 const FRAME_WIDTH = 800;
 const FRAME_HEIGHT = 480;
 const FRAME_PIXEL_COUNT = FRAME_WIDTH * FRAME_HEIGHT;
@@ -38,8 +39,13 @@ export async function storeFrameArtifacts(name, requestId, textPayload, framePay
 	const txtAbsolute = path.join(getFramesDir(), owner, `${fileId}.txt`);
 	const pf7aAbsolute = path.join(getFramesDir(), owner, `${fileId}.pf7a`);
 
+	const normalizedFramePayload = normalizeFrameArtifactPayload(Buffer.from(framePayload));
+	if (!normalizedFramePayload) {
+		throw new Error('invalid frame payload');
+	}
+
 	await fs.writeFile(txtAbsolute, textPayload);
-	await fs.writeFile(pf7aAbsolute, framePayload);
+	await fs.writeFile(pf7aAbsolute, normalizedFramePayload);
 
 	return {
 		legacyKey: txtRelative,
@@ -49,26 +55,29 @@ export async function storeFrameArtifacts(name, requestId, textPayload, framePay
 
 /** @param {Buffer} payload */
 function hasPf7aHeader(payload) {
-	return payload.length >= PF7A_HEADER_SIZE && payload.subarray(0, 4).equals(PF7A_MAGIC);
+	return payload.length >= PF7A_HEADER_SIZE && (payload.subarray(0, 4).equals(PF7A_MAGIC) || payload.subarray(0, 4).equals(PF7C_MAGIC));
 }
 
 /** @param {Buffer} payload */
-function isValidPf7a(payload) {
+function hasValidDimensions(payload) {
 	if (!hasPf7aHeader(payload)) {
 		return false;
 	}
 	const width = payload[4] | (payload[5] << 8);
 	const height = payload[6] | (payload[7] << 8);
-	return width === FRAME_WIDTH && height === FRAME_HEIGHT && payload.length === PF7A_HEADER_SIZE + FRAME_PIXEL_COUNT;
+	return width === FRAME_WIDTH && height === FRAME_HEIGHT;
 }
 
 /** @param {Buffer} payload */
-function isLegacyIndexedFrame(payload) {
-	return payload.length === FRAME_PIXEL_COUNT && payload.every((value) => value < 7);
+function isRawPf7a(payload) {
+	return payload.length >= PF7A_HEADER_SIZE
+		&& payload.subarray(0, 4).equals(PF7A_MAGIC)
+		&& hasValidDimensions(payload)
+		&& payload.length === PF7A_HEADER_SIZE + FRAME_PIXEL_COUNT;
 }
 
-/** @param {Buffer} payload */
-function encodePf7a(payload) {
+/** @param {Buffer} pixels */
+function encodePf7a(pixels) {
 	const header = Buffer.from([
 		PF7A_MAGIC[0],
 		PF7A_MAGIC[1],
@@ -79,7 +88,107 @@ function encodePf7a(payload) {
 		FRAME_HEIGHT & 0xff,
 		(FRAME_HEIGHT >> 8) & 0xff
 	]);
-	return Buffer.concat([header, payload]);
+	return Buffer.concat([header, pixels]);
+}
+
+/** @param {Buffer} payload */
+function isLegacyIndexedFrame(payload) {
+	return payload.length === FRAME_PIXEL_COUNT && payload.every((value) => value < 7);
+}
+
+/** @param {Buffer} payload */
+function encodePf7c(payload) {
+	const header = Buffer.from([
+		PF7C_MAGIC[0],
+		PF7C_MAGIC[1],
+		PF7C_MAGIC[2],
+		PF7C_MAGIC[3],
+		FRAME_WIDTH & 0xff,
+		(FRAME_WIDTH >> 8) & 0xff,
+		FRAME_HEIGHT & 0xff,
+		(FRAME_HEIGHT >> 8) & 0xff
+	]);
+	const body = [];
+	let i = 0;
+	while (i < payload.length) {
+		let repeatRun = 1;
+		while (i + repeatRun < payload.length && payload[i + repeatRun] === payload[i] && repeatRun < 128) {
+			repeatRun++;
+		}
+		if (repeatRun >= 3) {
+			body.push(127 + repeatRun);
+			body.push(payload[i]);
+			i += repeatRun;
+			continue;
+		}
+
+		const literalStart = i;
+		i += repeatRun;
+		while (i < payload.length) {
+			let lookahead = 1;
+			while (i + lookahead < payload.length && payload[i + lookahead] === payload[i] && lookahead < 128) {
+				lookahead++;
+			}
+			if (lookahead >= 3 || (i - literalStart) >= 128) {
+				break;
+			}
+			i += lookahead;
+		}
+		const literalLen = i - literalStart;
+		body.push(literalLen - 1);
+		for (let j = 0; j < literalLen; j++) {
+			body.push(payload[literalStart + j]);
+		}
+	}
+
+	return Buffer.concat([header, Buffer.from(body)]);
+}
+
+/** @param {Buffer} payload */
+export function decodeFrameArtifactPayload(payload) {
+	if (!hasValidDimensions(payload)) {
+		return null;
+	}
+	if (isRawPf7a(payload)) {
+		return payload.subarray(PF7A_HEADER_SIZE);
+	}
+	if (!payload.subarray(0, 4).equals(PF7C_MAGIC)) {
+		return null;
+	}
+
+	const encoded = payload.subarray(PF7A_HEADER_SIZE);
+	const out = Buffer.alloc(FRAME_PIXEL_COUNT);
+	let inPos = 0;
+	let outPos = 0;
+	while (inPos < encoded.length) {
+		const control = encoded[inPos++];
+		const runLen = control >= 128 ? control - 127 : control + 1;
+		if (control >= 128) {
+			if (inPos >= encoded.length) {
+				return null;
+			}
+			const value = encoded[inPos++];
+			if (outPos + runLen > FRAME_PIXEL_COUNT || value >= 7) {
+				return null;
+			}
+			out.fill(value, outPos, outPos + runLen);
+			outPos += runLen;
+			continue;
+		}
+		if (inPos + runLen > encoded.length || outPos + runLen > FRAME_PIXEL_COUNT) {
+			return null;
+		}
+		for (let i = 0; i < runLen; i++) {
+			const value = encoded[inPos + i];
+			if (value >= 7) {
+				return null;
+			}
+			out[outPos + i] = value;
+		}
+		inPos += runLen;
+		outPos += runLen;
+	}
+	return outPos === FRAME_PIXEL_COUNT ? out : null;
 }
 
 /**
@@ -87,11 +196,18 @@ function encodePf7a(payload) {
  * @returns {Buffer | null}
  */
 export function normalizeFrameArtifactPayload(payload) {
-	if (isValidPf7a(payload)) {
+	const decoded = decodeFrameArtifactPayload(payload);
+	if (decoded) {
+		const compressed = encodePf7c(decoded);
+		if (compressed.length <= payload.length) {
+			return compressed;
+		}
 		return payload;
 	}
 	if (isLegacyIndexedFrame(payload)) {
-		return encodePf7a(payload);
+		const raw = encodePf7a(payload);
+		const compressed = encodePf7c(payload);
+		return compressed.length <= raw.length ? compressed : raw;
 	}
 	return null;
 }

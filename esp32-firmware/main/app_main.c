@@ -18,16 +18,56 @@
 static const char *TAG = "pictureframe";
 static frame_settings_t s_settings;
 
-extern const uint8_t _binary_known_frame_800x480_packed_bin_start[];
-extern const uint8_t _binary_known_frame_800x480_packed_bin_end[];
-
 static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
 static const int WIFI_READY_WAIT_MS = 60000;
 
-typedef struct {
-	char artifact_key[256];
-} render_task_arg_t;
+static bool render_from_artifact_key(const char *artifact_key);
+
+static volatile bool s_render_in_progress;
+static char s_last_display_request_id[64];
+static char s_last_display_artifact[320];
+
+static void display_update_task(void *arg) {
+	char *artifact_key = (char *)arg;
+	frame_ws_stop();
+	if (artifact_key != NULL) {
+		if (!render_from_artifact_key(artifact_key)) {
+			ESP_LOGE(TAG, "display update failed");
+		}
+		free(artifact_key);
+	}
+	frame_ws_start();
+	s_render_in_progress = false;
+	vTaskDelete(NULL);
+}
+
+static void request_display_update(const char *artifact_key) {
+	if (artifact_key == NULL || artifact_key[0] == '\0') {
+		return;
+	}
+	if (s_render_in_progress) {
+		ESP_LOGW(TAG, "display update already in progress, ignoring duplicate request");
+		return;
+	}
+
+	size_t len = strlen(artifact_key);
+	char *copy = (char *)malloc(len + 1);
+	if (copy == NULL) {
+		ESP_LOGE(TAG, "failed to allocate display request");
+		return;
+	}
+	memcpy(copy, artifact_key, len + 1);
+
+	s_render_in_progress = true;
+	BaseType_t ok = xTaskCreate(display_update_task, "display_update", 8192, copy, 5, NULL);
+	if (ok != pdPASS) {
+		ESP_LOGE(TAG, "failed to start display update task");
+		free(copy);
+		s_render_in_progress = false;
+		return;
+	}
+}
 
 static bool starts_with(const char *value, const char *prefix) {
 	return value != NULL && prefix != NULL && strncmp(value, prefix, strlen(prefix)) == 0;
@@ -68,42 +108,20 @@ static bool render_from_artifact_key(const char *artifact_key) {
 	build_artifact_url(url, sizeof(url), artifact_key);
 	ESP_LOGI(TAG, "display update artifact=%s url=%s", artifact_key, url);
 
-	if (!display_driver_render_pf7a_url(url)) {
-		ESP_LOGE(TAG, "frame render failed for artifact=%s", artifact_key);
+	if (display_driver_render_pf7a_url(url)) {
+		return true;
+	}
+
+	ESP_LOGW(TAG, "streaming render failed, falling back to buffered download");
+	frame_payload_t payload = {0};
+	if (!frame_fetcher_download(url, &payload)) {
+		ESP_LOGE(TAG, "frame download failed for artifact=%s", artifact_key);
 		return false;
 	}
-	return true;
-}
 
-static void render_task(void *arg) {
-	render_task_arg_t *task_arg = (render_task_arg_t *)arg;
-	if (!render_from_artifact_key(task_arg->artifact_key)) {
-		ESP_LOGE(TAG, "display update failed");
-	}
-	free(task_arg);
-	vTaskDelete(NULL);
-}
-
-static void schedule_render_from_artifact_key(const char *artifact_key) {
-	render_task_arg_t *task_arg = calloc(1, sizeof(*task_arg));
-	if (task_arg == NULL) {
-		ESP_LOGE(TAG, "failed to allocate render task");
-		return;
-	}
-	strncpy(task_arg->artifact_key, artifact_key, sizeof(task_arg->artifact_key) - 1);
-	if (xTaskCreate(render_task, "render_task", 8192, task_arg, 5, NULL) != pdPASS) {
-		ESP_LOGE(TAG, "failed to start render task");
-		free(task_arg);
-	}
-}
-
-static void handle_display_payload(cJSON *display) {
-	cJSON *artifact_key = cJSON_GetObjectItem(display, "artifactKey");
-	if (!cJSON_IsString(artifact_key)) {
-		ESP_LOGW(TAG, "display payload missing artifactKey");
-		return;
-	}
-	schedule_render_from_artifact_key(artifact_key->valuestring);
+	bool ok = display_driver_render_pf7a(payload.data, payload.length);
+	frame_fetcher_free(&payload);
+	return ok;
 }
 
 static void handle_command_payload(cJSON *root) {
@@ -123,6 +141,35 @@ static void handle_command_payload(cJSON *root) {
 	}
 	if (cJSON_IsTrue(refresh_now) || cJSON_IsTrue(sync_now)) {
 		ESP_LOGI(TAG, "sync command requested");
+	}
+}
+
+static void handle_display_payload(cJSON *display_obj) {
+	cJSON *artifact_key = cJSON_GetObjectItem(display_obj, "artifactKey");
+	cJSON *request_id = cJSON_GetObjectItem(display_obj, "requestId");
+
+	if (!cJSON_IsString(artifact_key) || artifact_key->valuestring == NULL) {
+		return;
+	}
+
+	if (cJSON_IsString(request_id) && request_id->valuestring != NULL) {
+		if (strcmp(request_id->valuestring, s_last_display_request_id) == 0) {
+			ESP_LOGI(TAG, "ignoring duplicate display requestId=%s", request_id->valuestring);
+			return;
+		}
+		snprintf(s_last_display_request_id, sizeof(s_last_display_request_id), "%s", request_id->valuestring);
+	} else {
+		if (strcmp(artifact_key->valuestring, s_last_display_artifact) == 0) {
+			ESP_LOGI(TAG, "ignoring duplicate display artifact=%s", artifact_key->valuestring);
+			return;
+		}
+	}
+
+	snprintf(s_last_display_artifact, sizeof(s_last_display_artifact), "%s", artifact_key->valuestring);
+	request_display_update(artifact_key->valuestring);
+
+	if (cJSON_IsString(request_id) && request_id->valuestring != NULL) {
+		ESP_LOGI(TAG, "accepted display requestId=%s", request_id->valuestring);
 	}
 }
 
@@ -149,10 +196,12 @@ static void ws_message_handler(const char *payload, int payload_len) {
 
 	if (cJSON_IsString(type) && strcmp(type->valuestring, "helloAck") == 0) {
 		cJSON *pending = cJSON_GetObjectItem(root, "pending");
-		cJSON *display = cJSON_IsObject(pending) ? cJSON_GetObjectItem(pending, "display") : NULL;
-		if (cJSON_IsObject(display)) {
-			ESP_LOGI(TAG, "rendering pending display from helloAck");
-			handle_display_payload(display);
+		if (cJSON_IsObject(pending)) {
+			cJSON *display = cJSON_GetObjectItem(pending, "display");
+			if (cJSON_IsObject(display)) {
+				ESP_LOGI(TAG, "processing pending display from helloAck");
+				handle_display_payload(display);
+			}
 		}
 	}
 
@@ -174,47 +223,19 @@ static void refresh_task(void *arg) {
 	}
 }
 
-static void render_known_frame_once(void) {
-	const uint8_t *start = _binary_known_frame_800x480_packed_bin_start;
-	const uint8_t *end = _binary_known_frame_800x480_packed_bin_end;
-	size_t len = (size_t)(end - start);
-	ESP_LOGI(TAG, "rendering embedded known frame (%u bytes)", (unsigned)len);
-	if (!display_driver_render_packed_7color(start, len)) {
-		ESP_LOGE(TAG, "embedded known frame render failed");
-		return;
-	}
-	ESP_LOGI(TAG, "embedded known frame render complete");
-}
-
-static void run_boot_render_diagnostics(void) {
-	ESP_LOGW(TAG, "boot render diagnostics: solid black");
-	display_driver_render_solid_test(0);
-	vTaskDelay(pdMS_TO_TICKS(4000));
-
-	ESP_LOGW(TAG, "boot render diagnostics: checkerboard");
-	display_driver_render_checkerboard();
-	vTaskDelay(pdMS_TO_TICKS(4000));
-
-	ESP_LOGW(TAG, "boot render diagnostics: embedded known frame");
-	render_known_frame_once();
-	vTaskDelay(pdMS_TO_TICKS(20000));
-}
-
 void app_main(void) {
 	ESP_LOGI(TAG, "starting picture frame firmware");
 
 	bool display_ready = display_driver_init();
 	if (!display_ready) {
 		ESP_LOGE(TAG, "display init failed, continuing without panel output");
-	} else {
-		run_boot_render_diagnostics();
 	}
 	ESP_ERROR_CHECK(settings_store_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(settings_store_load(&s_settings) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(wifi_manager_init() ? ESP_OK : ESP_FAIL);
+	ESP_ERROR_CHECK(ble_provisioning_start(&s_settings, apply_new_wifi_config) ? ESP_OK : ESP_FAIL);
 
 	if (strlen(s_settings.wifi_ssid) == 0) {
-		ESP_ERROR_CHECK(ble_provisioning_start(&s_settings, apply_new_wifi_config) ? ESP_OK : ESP_FAIL);
 		ESP_LOGW(TAG, "wifi not provisioned yet");
 		return;
 	}
@@ -222,9 +243,6 @@ void app_main(void) {
 	ESP_ERROR_CHECK(wifi_manager_connect(s_settings.wifi_ssid, s_settings.wifi_password) ? ESP_OK : ESP_FAIL);
 	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
-		if (display_ready && !display_driver_render_checkerboard()) {
-			ESP_LOGW(TAG, "timeout checkerboard render failed");
-		}
 	}
 	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, s_settings.device_id, ws_message_handler) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);

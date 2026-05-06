@@ -15,18 +15,25 @@
 
 static const char *TAG = "display_driver";
 enum { HEADER_SIZE = 8 };
-static const char MAGIC[] = {'P', 'F', '7', 'A'};
+static const char MAGIC_RAW[] = {'P', 'F', '7', 'A'};
+static const char MAGIC_RLE[] = {'P', 'F', '7', 'C'};
 static const uint16_t PANEL_WIDTH = 800;
 static const uint16_t PANEL_HEIGHT = 480;
 static const size_t PANEL_BUFFER_SIZE = (PANEL_WIDTH / 2) * PANEL_HEIGHT;
 
-// XIAO ESP32-S3 wiring documented in esp32-firmware/README.md.
-static const gpio_num_t PIN_SCLK = GPIO_NUM_7;
-static const gpio_num_t PIN_MOSI = GPIO_NUM_9;
-static const gpio_num_t PIN_CS = GPIO_NUM_2;
-static const gpio_num_t PIN_DC = GPIO_NUM_4;
-static const gpio_num_t PIN_RST = GPIO_NUM_1;
-static const gpio_num_t PIN_BUSY = GPIO_NUM_6;
+// XIAO ESP32-C6 wiring (silkscreen label -> actual GPIO):
+//   RST  D0  -> GPIO0
+//   CS   D1  -> GPIO1
+//   DC   D3  -> GPIO21
+//   BUSY D5  -> GPIO23
+//   SCK  D8  -> GPIO19
+//   MOSI D10 -> GPIO18
+static const gpio_num_t PIN_SCLK = GPIO_NUM_19;
+static const gpio_num_t PIN_MOSI = GPIO_NUM_18;
+static const gpio_num_t PIN_CS = GPIO_NUM_1;
+static const gpio_num_t PIN_DC = GPIO_NUM_21;
+static const gpio_num_t PIN_RST = GPIO_NUM_0;
+static const gpio_num_t PIN_BUSY = GPIO_NUM_23;
 
 static spi_device_handle_t s_spi;
 static bool s_bus_ready;
@@ -39,8 +46,14 @@ static bool epd_wait_busy_idle_level(void);
 typedef struct {
 	uint8_t header[HEADER_SIZE];
 	size_t bytes_seen;
+	size_t pixels_written;
 	uint16_t width;
 	uint16_t height;
+	bool compressed;
+	bool rle_ctrl_active;
+	bool rle_repeat_mode;
+	bool rle_need_value;
+	size_t rle_remaining;
 	bool header_ok;
 	bool failed;
 } pf7a_stream_t;
@@ -85,12 +98,49 @@ static bool epd_send_data_buffer(const uint8_t *buffer, size_t len) {
 	if (buffer == NULL || len == 0) {
 		return false;
 	}
-	for (size_t i = 0; i < len; i++) {
-		if (!epd_send_data_byte(buffer[i])) {
+	if (!gpio_write(PIN_DC, 1) || !gpio_write(PIN_CS, 0)) {
+		return false;
+	}
+	const size_t chunk_size = 512;
+	for (size_t offset = 0; offset < len; offset += chunk_size) {
+		size_t chunk_len = len - offset;
+		if (chunk_len > chunk_size) {
+			chunk_len = chunk_size;
+		}
+		if (!epd_spi_write(buffer + offset, chunk_len)) {
+			gpio_write(PIN_CS, 1);
 			return false;
 		}
 	}
+	if (!gpio_write(PIN_CS, 1)) {
+		return false;
+	}
 	return true;
+}
+
+// Diagnostic: sample BUSY at fixed offsets so we can tell a dead/floating line
+// apart from a slow-asserting one without needing a scope.
+static void epd_log_busy_samples(const char *phase) {
+	const int offsets_us[] = {0, 1000, 5000, 20000, 100000, 500000, 2000000, 5000000};
+	const size_t n = sizeof(offsets_us) / sizeof(offsets_us[0]);
+	int64_t t0 = esp_timer_get_time();
+	int samples[8];
+	for (size_t i = 0; i < n; i++) {
+		while ((esp_timer_get_time() - t0) < offsets_us[i]) {
+			// busy-spin for short offsets to avoid 10ms tick granularity
+			if (offsets_us[i] - (int)(esp_timer_get_time() - t0) > 5000) {
+				vTaskDelay(1);
+			}
+		}
+		samples[i] = gpio_get_level(PIN_BUSY);
+	}
+	ESP_LOGI(
+		TAG,
+		"%s busy samples (us:lvl): 0:%d 1k:%d 5k:%d 20k:%d 100k:%d 500k:%d 2M:%d 5M:%d",
+		phase,
+		samples[0], samples[1], samples[2], samples[3],
+		samples[4], samples[5], samples[6], samples[7]
+	);
 }
 
 static bool epd_wait_busy_with_probe(uint32_t fallback_ms, const char *phase) {
@@ -121,7 +171,7 @@ static bool epd_wait_busy_with_probe(uint32_t fallback_ms, const char *phase) {
 
 static bool epd_wait_busy_idle_level(void) {
 	if (s_use_timed_busy_fallback) {
-		vTaskDelay(pdMS_TO_TICKS(50));
+		vTaskDelay(pdMS_TO_TICKS(200));
 		return true;
 	}
 	const int64_t deadline_us = esp_timer_get_time() + (30 * 1000 * 1000LL);
@@ -148,7 +198,7 @@ static bool epd_reset(void) {
 	if (!gpio_write(PIN_RST, 0)) {
 		return false;
 	}
-	vTaskDelay(pdMS_TO_TICKS(2));
+	vTaskDelay(pdMS_TO_TICKS(10));
 	if (!gpio_write(PIN_RST, 1)) {
 		return false;
 	}
@@ -161,6 +211,7 @@ static bool epd_turn_on_display(void) {
 	if (!epd_send_command(0x04)) {
 		return false;
 	}
+	epd_log_busy_samples("POWER_ON");
 	if (!epd_wait_busy_with_probe(250, "POWER_ON")) {
 		return false;
 	}
@@ -170,6 +221,7 @@ static bool epd_turn_on_display(void) {
 	if (!epd_send_command(0x12) || !epd_send_data_byte(0x00)) {
 		return false;
 	}
+	epd_log_busy_samples("DISPLAY_REFRESH");
 	if (!epd_wait_busy_with_probe(18000, "DISPLAY_REFRESH")) {
 		return false;
 	}
@@ -298,6 +350,9 @@ static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t wid
 			ESP_LOGE(TAG, "failed writing frame row %u", (unsigned)row);
 			return false;
 		}
+		if ((row % 8) == 0) {
+			vTaskDelay(1);
+		}
 	}
 	if (!epd_turn_on_display()) {
 		ESP_LOGE(TAG, "display refresh failed");
@@ -325,11 +380,59 @@ static bool pf7a_stream_write_pixel(pf7a_stream_t *state, size_t pixel_index, ui
 	return true;
 }
 
+static bool pf7a_stream_emit_pixel(pf7a_stream_t *state, uint8_t value) {
+	if (!pf7a_stream_write_pixel(state, state->pixels_written, value)) {
+		return false;
+	}
+	state->pixels_written++;
+	return true;
+}
+
+static bool pf7a_stream_consume_rle_byte(pf7a_stream_t *state, uint8_t byte) {
+	if (!state->rle_ctrl_active) {
+		state->rle_ctrl_active = true;
+		state->rle_repeat_mode = byte >= 128;
+		state->rle_need_value = state->rle_repeat_mode;
+		state->rle_remaining = state->rle_repeat_mode ? (size_t)(byte - 127) : (size_t)(byte + 1);
+		if (state->rle_remaining == 0) {
+			return false;
+		}
+		return true;
+	}
+
+	if (state->rle_repeat_mode) {
+		if (state->rle_need_value) {
+			state->rle_need_value = false;
+			for (size_t i = 0; i < state->rle_remaining; i++) {
+				if (!pf7a_stream_emit_pixel(state, byte)) {
+					return false;
+				}
+			}
+			state->rle_ctrl_active = false;
+			state->rle_remaining = 0;
+			return true;
+		}
+		return false;
+	}
+
+	if (!pf7a_stream_emit_pixel(state, byte)) {
+		return false;
+	}
+	state->rle_remaining--;
+	if (state->rle_remaining == 0) {
+		state->rle_ctrl_active = false;
+	}
+	return true;
+}
+
 static bool pf7a_stream_parse_header(pf7a_stream_t *state) {
-	if (memcmp(state->header, MAGIC, sizeof(MAGIC)) != 0) {
+	bool is_raw = memcmp(state->header, MAGIC_RAW, sizeof(MAGIC_RAW)) == 0;
+	bool is_rle = memcmp(state->header, MAGIC_RLE, sizeof(MAGIC_RLE)) == 0;
+	if (!is_raw && !is_rle) {
 		ESP_LOGE(TAG, "invalid frame magic");
 		return false;
 	}
+	state->compressed = is_rle;
 	state->width = state->header[4] | ((uint16_t)state->header[5] << 8);
 	state->height = state->header[6] | ((uint16_t)state->header[7] << 8);
 	if (state->width != PANEL_WIDTH || state->height != PANEL_HEIGHT) {
@@ -357,12 +460,20 @@ static esp_err_t pf7a_http_event_handler(esp_http_client_event_t *evt) {
 			}
 			continue;
 		}
+		state->bytes_seen++;
 
-		if (!state->header_ok || !pf7a_stream_write_pixel(state, state->bytes_seen - HEADER_SIZE, data[i])) {
+		if (!state->header_ok) {
 			state->failed = true;
 			return ESP_FAIL;
 		}
-		state->bytes_seen++;
+		if (!state->compressed && !pf7a_stream_emit_pixel(state, data[i])) {
+			state->failed = true;
+			return ESP_FAIL;
+		}
+		if (state->compressed && !pf7a_stream_consume_rle_byte(state, data[i])) {
+			state->failed = true;
+			return ESP_FAIL;
+		}
 	}
 	return ESP_OK;
 }
@@ -424,8 +535,8 @@ bool display_driver_init(void) {
 	}
 	spi_device_interface_config_t dev_cfg = {
 		.mode = 0,
-		// Match Pi behavior conservatively for compatibility debugging.
-		.clock_speed_hz = 100 * 1000,
+		// Conservative SPI clock for software-CS over jumper wires; raise once pixels appear.
+		.clock_speed_hz = 2 * 1000 * 1000,
 		.spics_io_num = -1, // software-controlled CS
 		.queue_size = 1
 	};
@@ -459,7 +570,9 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		ESP_LOGE(TAG, "frame payload too small");
 		return false;
 	}
-	if (memcmp(payload, MAGIC, sizeof(MAGIC)) != 0) {
+	bool is_raw = memcmp(payload, MAGIC_RAW, sizeof(MAGIC_RAW)) == 0;
+	bool is_rle = memcmp(payload, MAGIC_RLE, sizeof(MAGIC_RLE)) == 0;
+	if (!is_raw && !is_rle) {
 		ESP_LOGE(TAG, "invalid frame magic");
 		return false;
 	}
@@ -467,24 +580,79 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 	uint16_t width = payload[4] | ((uint16_t)payload[5] << 8);
 	uint16_t height = payload[6] | ((uint16_t)payload[7] << 8);
 	const uint8_t *pixels = payload + HEADER_SIZE;
-	size_t pixel_count = payload_len - HEADER_SIZE;
+	size_t encoded_len = payload_len - HEADER_SIZE;
 
 	if (width != PANEL_WIDTH || height != PANEL_HEIGHT) {
 		ESP_LOGE(TAG, "unexpected frame dimensions %ux%u", width, height);
 		return false;
 	}
-	if (pixel_count != (size_t)width * (size_t)height) {
-		ESP_LOGE(TAG, "invalid frame size");
-		return false;
-	}
-
-	for (uint16_t y = 0; y < height; y++) {
-		size_t src_row = (size_t)y * width;
-		size_t dst_row = (size_t)y * (width / 2);
-		for (uint16_t x = 0; x < width; x += 2) {
-			uint8_t left = normalize_color(pixels[src_row + x]);
-			uint8_t right = normalize_color(pixels[src_row + x + 1]);
-			s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
+	const size_t pixel_count = (size_t)width * (size_t)height;
+	if (is_raw) {
+		if (encoded_len != pixel_count) {
+			ESP_LOGE(TAG, "invalid raw frame size");
+			return false;
+		}
+		for (uint16_t y = 0; y < height; y++) {
+			size_t src_row = (size_t)y * width;
+			size_t dst_row = (size_t)y * (width / 2);
+			for (uint16_t x = 0; x < width; x += 2) {
+				uint8_t left = normalize_color(pixels[src_row + x]);
+				uint8_t right = normalize_color(pixels[src_row + x + 1]);
+				s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
+			}
+		}
+	} else {
+		memset(s_panel_buffer, 0, PANEL_BUFFER_SIZE);
+		size_t written = 0;
+		size_t i = 0;
+		while (i < encoded_len) {
+			uint8_t control = pixels[i++];
+			size_t run = control >= 128 ? (size_t)(control - 127) : (size_t)(control + 1);
+			if (control >= 128) {
+				if (i >= encoded_len) {
+					ESP_LOGE(TAG, "truncated RLE frame");
+					return false;
+				}
+				uint8_t value = pixels[i++];
+				for (size_t j = 0; j < run; j++) {
+					if (written >= pixel_count) {
+						ESP_LOGE(TAG, "RLE frame overflow");
+						return false;
+					}
+					uint8_t color = normalize_color(value);
+					uint8_t *packed = &s_panel_buffer[written / 2];
+					if ((written & 1) == 0) {
+						*packed = (uint8_t)((color << 4) | (*packed & 0x0F));
+					} else {
+						*packed = (uint8_t)((*packed & 0xF0) | color);
+					}
+					written++;
+				}
+			} else {
+				if (i + run > encoded_len) {
+					ESP_LOGE(TAG, "truncated RLE literal frame");
+					return false;
+				}
+				for (size_t j = 0; j < run; j++) {
+					if (written >= pixel_count) {
+						ESP_LOGE(TAG, "RLE frame overflow");
+						return false;
+					}
+					uint8_t color = normalize_color(pixels[i + j]);
+					uint8_t *packed = &s_panel_buffer[written / 2];
+					if ((written & 1) == 0) {
+						*packed = (uint8_t)((color << 4) | (*packed & 0x0F));
+					} else {
+						*packed = (uint8_t)((*packed & 0xF0) | color);
+					}
+					written++;
+				}
+				i += run;
+			}
+		}
+		if (written != pixel_count) {
+			ESP_LOGE(TAG, "invalid RLE frame size");
+			return false;
 		}
 	}
 
@@ -530,8 +698,12 @@ bool display_driver_render_pf7a_url(const char *url) {
 		ESP_LOGE(TAG, "stream download returned HTTP %d", status_code);
 		return false;
 	}
-	if (state.failed || state.bytes_seen != HEADER_SIZE + PANEL_WIDTH * PANEL_HEIGHT) {
-		ESP_LOGE(TAG, "invalid streamed frame size: %u", (unsigned)state.bytes_seen);
+	if (state.failed || state.pixels_written != (size_t)PANEL_WIDTH * PANEL_HEIGHT) {
+		ESP_LOGE(TAG, "invalid streamed frame pixels: %u", (unsigned)state.pixels_written);
+		return false;
+	}
+	if (state.compressed && state.rle_ctrl_active) {
+		ESP_LOGE(TAG, "truncated streamed RLE frame");
 		return false;
 	}
 
