@@ -129,3 +129,66 @@ test('listArtifactKeys includes pf7a and pf7c files', async () => {
 		await fs.rm(dir, { recursive: true, force: true });
 	}
 });
+
+test('decodes pf7c where palette index is nibble-replicated byte', () => {
+	const header = HEADER_RLE;
+	const body = Buffer.alloc((PIXELS / 128) * 2);
+	for (let i = 0; i < body.length; i += 2) {
+		body[i] = 255;
+		body[i + 1] = 0x66;
+	}
+	const payload = Buffer.concat([header, body]);
+	const decoded = decodeFrameArtifactPayload(payload);
+	assert.ok(decoded);
+	assert.equal(decoded.length, PIXELS);
+	assert.equal(decoded[0], 6);
+	assert.equal(decoded[1], 6);
+});
+
+test('decodes pf7c stream that expands to packed pixel bytes', () => {
+	const packedLen = PIXELS / 2;
+	const body = Buffer.alloc((packedLen / 128) * 2);
+	for (let i = 0; i < body.length; i += 2) {
+		body[i] = 255;
+		body[i + 1] = 0x12;
+	}
+	const payload = Buffer.concat([HEADER_RLE, body]);
+	const decoded = decodeFrameArtifactPayload(payload);
+	assert.ok(decoded);
+	assert.equal(decoded.length, PIXELS);
+	assert.equal(decoded[0], 1);
+	assert.equal(decoded[1], 2);
+	assert.equal(decoded[2], 1);
+	assert.equal(decoded[3], 2);
+});
+
+test('decodes legacy packbits-style pf7c payloads', () => {
+	const body = Buffer.alloc((PIXELS / 128) * 2);
+	for (let i = 0; i < body.length; i += 2) {
+		body[i] = 129;
+		body[i + 1] = 0x33;
+	}
+	const payload = Buffer.concat([HEADER_RLE, body]);
+	const decoded = decodeFrameArtifactPayload(payload);
+	assert.ok(decoded);
+	assert.equal(decoded.length, PIXELS);
+	assert.equal(decoded[0], 3);
+	assert.equal(decoded[1], 3);
+});
+
+test('lenient pf7c decode accepts slight output overflow', () => {
+	const body = Buffer.alloc((PIXELS / 128) * 2 + 2);
+	for (let i = 0; i < body.length - 2; i += 2) {
+		body[i] = 255;
+		body[i + 1] = 0x44;
+	}
+	body[body.length - 2] = 130;
+	body[body.length - 1] = 0x44;
+
+	const payload = Buffer.concat([HEADER_RLE, body]);
+	const decoded = decodeFrameArtifactPayload(payload);
+	assert.ok(decoded);
+	assert.equal(decoded.length, PIXELS);
+	assert.equal(decoded[0], 4);
+	assert.equal(decoded[1], 4);
+});

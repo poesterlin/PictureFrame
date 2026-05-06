@@ -175,6 +175,190 @@ function encodePf7c(payload) {
 	return Buffer.concat([header, Buffer.from(body)]);
 }
 
+/** @param {number} value */
+function normalizePaletteIndex(value) {
+	if (value < 16) {
+		return value;
+	}
+	const hi = (value >> 4) & 0x0f;
+	const lo = value & 0x0f;
+	if (hi === lo) {
+		return hi;
+	}
+	if (hi === 0) {
+		return lo;
+	}
+	if (lo === 0) {
+		return hi;
+	}
+	return lo;
+}
+
+/**
+ * @param {Buffer} encoded
+ * @param {number} expectedOutLen
+ * @param {(value: number) => number} normalize
+ * @param {'rle-high' | 'packbits'} strategy
+ * @returns {Buffer | null}
+ */
+function decodePf7cBody(encoded, expectedOutLen, normalize, strategy) {
+	const out = Buffer.alloc(expectedOutLen);
+	let inPos = 0;
+	let outPos = 0;
+	while (inPos < encoded.length) {
+		const control = encoded[inPos++];
+
+		if (strategy === 'packbits' && control === 128) {
+			continue;
+		}
+
+		const isRepeat = strategy === 'rle-high' ? control >= 128 : control > 128;
+		const runLen = strategy === 'rle-high'
+			? (control >= 128 ? control - 127 : control + 1)
+			: (control > 128 ? 257 - control : control + 1);
+
+		if (runLen <= 0) {
+			return null;
+		}
+
+		if (isRepeat) {
+			if (inPos >= encoded.length) {
+				return null;
+			}
+			const value = normalize(encoded[inPos++]);
+			if (outPos + runLen > expectedOutLen) {
+				return null;
+			}
+			out.fill(value, outPos, outPos + runLen);
+			outPos += runLen;
+			continue;
+		}
+		if (inPos + runLen > encoded.length || outPos + runLen > expectedOutLen) {
+			return null;
+		}
+		for (let i = 0; i < runLen; i++) {
+			out[outPos + i] = normalize(encoded[inPos + i]);
+		}
+		inPos += runLen;
+		outPos += runLen;
+	}
+	return outPos === expectedOutLen ? out : null;
+}
+
+/**
+ * @param {Buffer} encoded
+ * @param {number} expectedOutLen
+ * @param {(value: number) => number} normalize
+ * @param {'rle-high' | 'packbits'} strategy
+ * @returns {{ out: Buffer, delta: number } | null}
+ */
+function decodePf7cBodyLenient(encoded, expectedOutLen, normalize, strategy) {
+	const out = Buffer.alloc(expectedOutLen);
+	let inPos = 0;
+	let outPos = 0;
+	let lastValue = 0;
+
+	while (inPos < encoded.length) {
+		const control = encoded[inPos++];
+
+		if (strategy === 'packbits' && control === 128) {
+			continue;
+		}
+
+		const isRepeat = strategy === 'rle-high' ? control >= 128 : control > 128;
+		const runLen = strategy === 'rle-high'
+			? (control >= 128 ? control - 127 : control + 1)
+			: (control > 128 ? 257 - control : control + 1);
+
+		if (runLen <= 0) {
+			return null;
+		}
+
+		if (isRepeat) {
+			if (inPos >= encoded.length) {
+				return null;
+			}
+			const value = normalize(encoded[inPos++]);
+			lastValue = value;
+			const writable = Math.max(0, Math.min(runLen, expectedOutLen - outPos));
+			if (writable > 0) {
+				out.fill(value, outPos, outPos + writable);
+				outPos += writable;
+			}
+			continue;
+		}
+
+		if (inPos + runLen > encoded.length) {
+			return null;
+		}
+
+		for (let i = 0; i < runLen; i++) {
+			const value = normalize(encoded[inPos + i]);
+			lastValue = value;
+			if (outPos < expectedOutLen) {
+				out[outPos++] = value;
+			}
+		}
+		inPos += runLen;
+	}
+
+	if (outPos < expectedOutLen) {
+		out.fill(lastValue, outPos, expectedOutLen);
+	}
+
+	return { out, delta: outPos - expectedOutLen };
+}
+
+/**
+ * @param {Buffer} encoded
+ * @param {number} expectedOutLen
+ * @param {(value: number) => number} normalize
+ * @returns {Buffer | null}
+ */
+function decodePf7cAnyStrategy(encoded, expectedOutLen, normalize) {
+	const strategies = ['rle-high', 'packbits'];
+	for (const strategy of strategies) {
+		const out = decodePf7cBody(encoded, expectedOutLen, normalize, /** @type {'rle-high'|'packbits'} */ (strategy));
+		if (out) {
+			return out;
+		}
+	}
+	return null;
+}
+
+/**
+ * @param {Buffer} encoded
+ * @param {number} expectedOutLen
+ * @param {(value: number) => number} normalize
+ * @returns {Buffer | null}
+ */
+function decodePf7cAnyStrategyLenient(encoded, expectedOutLen, normalize) {
+	const strategies = ['rle-high', 'packbits'];
+	/** @type {{ out: Buffer, delta: number } | null} */
+	let best = null;
+
+	for (const strategy of strategies) {
+		const candidate = decodePf7cBodyLenient(
+			encoded,
+			expectedOutLen,
+			normalize,
+			/** @type {'rle-high'|'packbits'} */ (strategy)
+		);
+		if (!candidate) {
+			continue;
+		}
+		if (!best || Math.abs(candidate.delta) < Math.abs(best.delta)) {
+			best = candidate;
+		}
+	}
+
+	if (!best) {
+		return null;
+	}
+
+	return Math.abs(best.delta) <= 6000 ? best.out : null;
+}
+
 /** @param {Buffer} payload */
 export function decodeFrameArtifactPayload(payload) {
 	if (!hasValidDimensions(payload)) {
@@ -192,38 +376,31 @@ export function decodeFrameArtifactPayload(payload) {
 	}
 
 	const encoded = payload.subarray(PF7A_HEADER_SIZE);
-	const out = Buffer.alloc(FRAME_PIXEL_COUNT);
-	let inPos = 0;
-	let outPos = 0;
-	while (inPos < encoded.length) {
-		const control = encoded[inPos++];
-		const runLen = control >= 128 ? control - 127 : control + 1;
-		if (control >= 128) {
-			if (inPos >= encoded.length) {
-				return null;
-			}
-			const value = encoded[inPos++];
-			if (outPos + runLen > FRAME_PIXEL_COUNT || value >= 16) {
-				return null;
-			}
-			out.fill(value, outPos, outPos + runLen);
-			outPos += runLen;
-			continue;
-		}
-		if (inPos + runLen > encoded.length || outPos + runLen > FRAME_PIXEL_COUNT) {
-			return null;
-		}
-		for (let i = 0; i < runLen; i++) {
-			const value = encoded[inPos + i];
-			if (value >= 16) {
-				return null;
-			}
-			out[outPos + i] = value;
-		}
-		inPos += runLen;
-		outPos += runLen;
+	const indexedPixels = decodePf7cAnyStrategy(encoded, FRAME_PIXEL_COUNT, normalizePaletteIndex);
+	if (indexedPixels) {
+		return indexedPixels;
 	}
-	return outPos === FRAME_PIXEL_COUNT ? out : null;
+
+	const packedPixels = decodePf7cAnyStrategy(encoded, FRAME_PACKED_PIXEL_BYTES, (value) => value);
+	if (packedPixels) {
+		return decodePackedNibbles(packedPixels);
+	}
+
+	const indexedPixelsLenient = decodePf7cAnyStrategyLenient(encoded, FRAME_PIXEL_COUNT, normalizePaletteIndex);
+	if (indexedPixelsLenient) {
+		return indexedPixelsLenient;
+	}
+
+	const packedPixelsLenient = decodePf7cAnyStrategyLenient(
+		encoded,
+		FRAME_PACKED_PIXEL_BYTES,
+		(value) => value
+	);
+	if (packedPixelsLenient) {
+		return decodePackedNibbles(packedPixelsLenient);
+	}
+
+	return null;
 }
 
 /**
@@ -293,10 +470,22 @@ async function walk(dir) {
 export async function listArtifactKeys() {
 	await ensureFramesDir();
 	const files = await walk(getFramesDir());
-	const artifactFiles = files.filter((filePath) => {
+	const preferredByBase = new Map();
+	for (const filePath of files) {
 		const lower = filePath.toLowerCase();
-		return lower.endsWith('.pf7a') || lower.endsWith('.pf7c');
-	});
+		let rank = 0;
+		if (lower.endsWith('.txt')) rank = 1;
+		if (lower.endsWith('.pf7a')) rank = 2;
+		if (lower.endsWith('.pf7c')) rank = 3;
+		if (rank === 0) continue;
+
+		const base = filePath.slice(0, filePath.lastIndexOf('.'));
+		const current = preferredByBase.get(base);
+		if (!current || rank > current.rank) {
+			preferredByBase.set(base, { filePath, rank });
+		}
+	}
+	const artifactFiles = Array.from(preferredByBase.values()).map((entry) => entry.filePath);
 	/** @type {string[]} */
 	const validFiles = [];
 	for (const filePath of artifactFiles) {
