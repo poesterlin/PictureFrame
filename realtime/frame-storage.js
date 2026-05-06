@@ -7,6 +7,7 @@ const PF7C_MAGIC = Buffer.from('PF7C');
 const FRAME_WIDTH = 800;
 const FRAME_HEIGHT = 480;
 const FRAME_PIXEL_COUNT = FRAME_WIDTH * FRAME_HEIGHT;
+const FRAME_PACKED_PIXEL_BYTES = FRAME_PIXEL_COUNT / 2;
 const PF7A_HEADER_SIZE = 8;
 
 /** @param {string | undefined | null} input */
@@ -74,6 +75,14 @@ function isRawPf7a(payload) {
 		&& payload.subarray(0, 4).equals(PF7A_MAGIC)
 		&& hasValidDimensions(payload)
 		&& payload.length === PF7A_HEADER_SIZE + FRAME_PIXEL_COUNT;
+}
+
+/** @param {Buffer} payload */
+function isPackedPf7a(payload) {
+	return payload.length >= PF7A_HEADER_SIZE
+		&& payload.subarray(0, 4).equals(PF7A_MAGIC)
+		&& hasValidDimensions(payload)
+		&& payload.length === PF7A_HEADER_SIZE + FRAME_PACKED_PIXEL_BYTES;
 }
 
 /** @param {Buffer} pixels */
@@ -151,6 +160,17 @@ export function decodeFrameArtifactPayload(payload) {
 	}
 	if (isRawPf7a(payload)) {
 		return payload.subarray(PF7A_HEADER_SIZE);
+	}
+	if (isPackedPf7a(payload)) {
+		const packed = payload.subarray(PF7A_HEADER_SIZE);
+		const out = Buffer.alloc(FRAME_PIXEL_COUNT);
+		let outPos = 0;
+		for (let i = 0; i < packed.length; i++) {
+			const byte = packed[i];
+			out[outPos++] = (byte >> 4) & 0x0f;
+			out[outPos++] = byte & 0x0f;
+		}
+		return out;
 	}
 	if (!payload.subarray(0, 4).equals(PF7C_MAGIC)) {
 		return null;
@@ -249,7 +269,10 @@ async function walk(dir) {
 export async function listArtifactKeys() {
 	await ensureFramesDir();
 	const files = await walk(getFramesDir());
-	const artifactFiles = files.filter((filePath) => filePath.toLowerCase().endsWith('.pf7a'));
+	const artifactFiles = files.filter((filePath) => {
+		const lower = filePath.toLowerCase();
+		return lower.endsWith('.pf7a') || lower.endsWith('.pf7c');
+	});
 	/** @type {string[]} */
 	const validFiles = [];
 	for (const filePath of artifactFiles) {

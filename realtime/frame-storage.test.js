@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { decodeFrameArtifactPayload, ensureFrameArtifactFile, normalizeFrameArtifactPayload } from './frame-storage.js';
+import {
+	decodeFrameArtifactPayload,
+	ensureFrameArtifactFile,
+	listArtifactKeys,
+	normalizeFrameArtifactPayload
+} from './frame-storage.js';
 
 const WIDTH = 800;
 const HEIGHT = 480;
@@ -19,6 +24,21 @@ test('passes through valid pf7a payloads', () => {
 	const normalized = normalizeFrameArtifactPayload(payload);
 	assert.ok(normalized);
 	assert.deepEqual(decodeFrameArtifactPayload(normalized), pixels);
+});
+
+test('decodes nibble-packed pf7a payloads', () => {
+	const packed = Buffer.alloc(PIXELS / 2);
+	for (let i = 0; i < packed.length; i++) {
+		packed[i] = 0x34;
+	}
+	const payload = Buffer.concat([HEADER_RAW, packed]);
+	const decoded = decodeFrameArtifactPayload(payload);
+	assert.ok(decoded);
+	assert.equal(decoded.length, PIXELS);
+	assert.equal(decoded[0], 3);
+	assert.equal(decoded[1], 4);
+	assert.equal(decoded[2], 3);
+	assert.equal(decoded[3], 4);
 });
 
 test('converts renamed legacy indexed payloads', () => {
@@ -63,4 +83,36 @@ test('decodes valid pf7c payloads', () => {
 	assert.equal(decoded[1], 4);
 	assert.equal(decoded[2], 4);
 	assert.equal(decoded[3], 1);
+});
+
+test('listArtifactKeys includes pf7a and pf7c files', async () => {
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pf7-list-'));
+	const previousFramesDir = process.env.FRAMES_DIR;
+	process.env.FRAMES_DIR = dir;
+
+	try {
+		const ownerDir = path.join(dir, 'tester');
+		await fs.mkdir(ownerDir, { recursive: true });
+
+		const pf7aPixels = Buffer.alloc(PIXELS, 1);
+		const pf7aPayload = Buffer.concat([HEADER_RAW, pf7aPixels]);
+		await fs.writeFile(path.join(ownerDir, 'a.pf7a'), pf7aPayload);
+
+		const pf7cPixels = Buffer.alloc(PIXELS, 2);
+		const pf7cPayload = normalizeFrameArtifactPayload(Buffer.concat([HEADER_RAW, pf7cPixels]));
+		assert.ok(pf7cPayload);
+		assert.ok(pf7cPayload.subarray(0, 4).equals(HEADER_RLE.subarray(0, 4)));
+		await fs.writeFile(path.join(ownerDir, 'b.pf7c'), pf7cPayload);
+
+		const keys = await listArtifactKeys();
+		assert.ok(keys.includes('frames/tester/a.pf7a'));
+		assert.ok(keys.includes('frames/tester/b.pf7c'));
+	} finally {
+		if (previousFramesDir === undefined) {
+			delete process.env.FRAMES_DIR;
+		} else {
+			process.env.FRAMES_DIR = previousFramesDir;
+		}
+		await fs.rm(dir, { recursive: true, force: true });
+	}
 });

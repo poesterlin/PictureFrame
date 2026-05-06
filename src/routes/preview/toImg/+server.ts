@@ -60,10 +60,10 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	let array = await fs.readFile(filePath);
-	if (key.toLowerCase().endsWith('.pf7a')) {
+	if (key.toLowerCase().endsWith('.pf7a') || key.toLowerCase().endsWith('.pf7c')) {
 		const decoded = decodeFrameArtifactPayload(array);
 		if (!decoded) {
-			throw error(400, 'invalid pf7a file');
+			throw error(400, 'invalid frame artifact file');
 		}
 		array = decoded;
 	}
