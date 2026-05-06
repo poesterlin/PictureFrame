@@ -36,9 +36,11 @@
 	let preview = false;
 	let loading = false;
 
-	let files: FileList | null = null;
+	let files: File[] | null = null;
 	let fileIdx = 0;
 	let reqId = Math.random() * 12345;
+	let dropHover = false;
+	let dragDepth = 0;
 
 	let nameOverlay = false;
 	let overlayName = 'Anonym';
@@ -96,11 +98,22 @@
 
 	const throttled = async () => await throttle(() => ditherImg(), 120, { leading: true })();
 
-	async function uploadImg() {
+	function getImageFiles(newFiles: FileList | File[] | null) {
+		if (!newFiles?.length) {
+			return [];
+		}
+
+		return Array.from(newFiles).filter((file) => file.type.startsWith('image/'));
+	}
+
+	async function uploadImg(newFiles: FileList | File[] | null = null) {
 		diff = { x: 0, y: 0 };
 		fill = false;
 
-		files = input.files;
+		if (newFiles) {
+			files = getImageFiles(newFiles);
+			fileIdx = 0;
+		}
 
 		if (!files?.length) {
 			return;
@@ -203,6 +216,25 @@
 		imagePan = false;
 		lastPos = undefined;
 	}
+
+	function onDropZoneEnter(event: DragEvent) {
+		event.preventDefault();
+		dragDepth += 1;
+		dropHover = true;
+	}
+
+	function onDropZoneLeave(event: DragEvent) {
+		event.preventDefault();
+		dragDepth = Math.max(0, dragDepth - 1);
+		dropHover = dragDepth > 0;
+	}
+
+	async function onDropZone(event: DragEvent) {
+		event.preventDefault();
+		dragDepth = 0;
+		dropHover = false;
+		await uploadImg(event.dataTransfer?.files ?? null);
+	}
 </script>
 
 <svelte:head>
@@ -215,27 +247,42 @@
 	{/if}
 </svelte:head>
 
-<svelte:body on:pointermove={(e) => dragImage(e)} on:pointerup={cancelDrag} />
+<svelte:body
+	on:pointermove={(e) => dragImage(e)}
+	on:pointerup={cancelDrag}
+	on:dragover|preventDefault
+	on:drop|preventDefault
+/>
 
 {#if !preview}
-	<div id="preview">
-		<div id="frame-bottom">
-			Der Bilderrahmen benutzt ein Display mit <b>nur 7 Farben</b>
-			<span id="colors">
-				{#each ['white', 'black', 'red', 'green', 'blue', 'orange', 'yellow'] as col}
-					<span class="color" id={col} />
-				{/each}
-			</span>
+	<div
+		class="drop-zone"
+		class:active={dropHover}
+		on:dragenter={onDropZoneEnter}
+		on:dragover|preventDefault
+		on:dragleave={onDropZoneLeave}
+		on:drop={onDropZone}
+	>
+		<div id="preview">
+			<div id="frame-bottom">
+				Der Bilderrahmen benutzt ein Display mit <b>nur 7 Farben</b>
+				<span id="colors">
+					{#each ['white', 'black', 'red', 'green', 'blue', 'orange', 'yellow'] as col}
+						<span class="color" id={col} />
+					{/each}
+				</span>
+			</div>
 		</div>
-	</div>
 
-	<button class="main primary" on:click={() => input.click()}>Bild laden</button>
+		<button class="main primary" on:click={() => input.click()}>Bild laden</button>
+		<p class="drop-hint">Oder Bilddateien hierher ziehen</p>
+	</div>
 {/if}
 <input
 	type="file"
 	alt="Bild hochladen"
 	bind:this={input}
-	on:change={uploadImg}
+	on:change={() => uploadImg(input.files)}
 	multiple={true}
 	accept="image/jpeg, image/png, image/jpg"
 />
@@ -352,6 +399,27 @@
 	}
 	button.main {
 		margin: 6vh auto 0;
+	}
+
+	.drop-zone {
+		border: 2px dashed transparent;
+		border-radius: 20px;
+		padding: 0.7rem 0 1.1rem;
+		transition: border-color 0.2s ease, background-color 0.2s ease;
+		max-width: min(86vw, 560px);
+		margin: 2rem auto 0;
+	}
+
+	.drop-zone.active {
+		border-color: #f8a0a0;
+		background: #ffffff1f;
+	}
+
+	.drop-hint {
+		text-align: center;
+		color: #f3d0d0;
+		font-size: 0.92rem;
+		margin: 0.7rem 0 0;
 	}
 	button.primary {
 		background: #f77878;
