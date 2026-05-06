@@ -676,8 +676,6 @@ bool display_driver_render_pf7a_url(const char *url) {
 		.url = url,
 		.timeout_ms = 20000,
 		.transport_type = HTTP_TRANSPORT_OVER_SSL,
-		.event_handler = pf7a_http_event_handler,
-		.user_data = &state,
 		.crt_bundle_attach = esp_crt_bundle_attach
 	};
 
@@ -686,16 +684,50 @@ bool display_driver_render_pf7a_url(const char *url) {
 		return false;
 	}
 
-	esp_err_t err = esp_http_client_perform(client);
-	int status_code = esp_http_client_get_status_code(client);
-	esp_http_client_cleanup(client);
-
+	esp_err_t err = esp_http_client_open(client, 0);
 	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "stream download failed: %s", esp_err_to_name(err));
+		ESP_LOGE(TAG, "stream open failed: %s", esp_err_to_name(err));
+		esp_http_client_cleanup(client);
 		return false;
 	}
+
+	(void)esp_http_client_fetch_headers(client);
+	int status_code = esp_http_client_get_status_code(client);
 	if (status_code < 200 || status_code >= 300) {
 		ESP_LOGE(TAG, "stream download returned HTTP %d", status_code);
+		esp_http_client_close(client);
+		esp_http_client_cleanup(client);
+		return false;
+	}
+
+	uint8_t io_buf[1024];
+	while (true) {
+		int read_len = esp_http_client_read(client, (char *)io_buf, sizeof(io_buf));
+		if (read_len < 0) {
+			ESP_LOGE(TAG, "stream read failed");
+			state.failed = true;
+			break;
+		}
+		if (read_len == 0) {
+			break;
+		}
+
+		esp_http_client_event_t evt = {
+			.event_id = HTTP_EVENT_ON_DATA,
+			.data = io_buf,
+			.data_len = read_len,
+			.user_data = &state
+		};
+		if (pf7a_http_event_handler(&evt) != ESP_OK) {
+			state.failed = true;
+			break;
+		}
+	}
+
+	esp_http_client_close(client);
+	esp_http_client_cleanup(client);
+
+	if (state.failed) {
 		return false;
 	}
 	if (state.failed || state.pixels_written != (size_t)PANEL_WIDTH * PANEL_HEIGHT) {

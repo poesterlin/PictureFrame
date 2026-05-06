@@ -4,6 +4,7 @@
 	import Carousel from 'svelte-carousel';
 
 	export let data: PageData;
+	let deviceId = 'default';
 
 	async function deleteCurrent(currentPageIndex: number) {
 		if (!confirm('wirklich löschen?')) {
@@ -21,7 +22,7 @@
 	async function showCurrent(currentPageIndex: number) {
 		await fetch('/command', {
 			method: 'POST',
-			body: JSON.stringify({ key: data.keys![currentPageIndex] })
+			body: JSON.stringify({ key: data.keys![currentPageIndex], deviceId })
 		});
 	}
 
@@ -46,6 +47,8 @@
 			<div slot="dots">
 				<pre>{(index + 1).toString().padStart(pagesCount.toString().length, '0')}/{pagesCount}</pre>
 				<form>
+					<label for="deviceId">Device ID</label>
+					<input type="text" id="deviceId" bind:value={deviceId} />
 					<button on:click={() => showCurrent(index)}>Anzeigen</button>
 					<button class="danger" on:click={() => deleteCurrent(index)}>Löschen</button>
 				</form>
@@ -90,6 +93,16 @@
 		width: 600px;
 		max-width: 95vw;
 		margin: 5vh auto;
+	}
+
+	form > label,
+	form > input {
+		flex: 1 1 100%;
+		text-align: center;
+	}
+
+	form > input {
+		padding: 8px;
 	}
 
 	form > button {
