@@ -2,7 +2,7 @@
 	import throttle from 'lodash.throttle';
 	import type { DrawingOptions } from '$lib/dither';
 	import type { Remote } from 'comlink';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { getWorkerInstance } from '$lib/util';
 	import { native } from '$lib/no-worker';
 
@@ -31,6 +31,10 @@
 				// Noop
 			}
 		}
+	});
+
+	onDestroy(() => {
+		throttledDither.cancel();
 	});
 
 	let preview = false;
@@ -82,7 +86,6 @@
 		if (workerInstance) {
 			canvasBlob = await workerInstance.ditherImg(imgData, options);
 		} else {
-			processing = false;
 			canvasBlob = await native.ditherImg(img, imgData, options);
 		}
 
@@ -96,7 +99,13 @@
 		transaction?.finish();
 	}
 
-	const throttled = async () => await throttle(() => ditherImg(), 120, { leading: true })();
+	const throttledDither = throttle(
+		() => {
+			void ditherImg();
+		},
+		120,
+		{ leading: true, trailing: true }
+	);
 
 	function getImageFiles(newFiles: FileList | File[] | null) {
 		if (!newFiles?.length) {
@@ -208,8 +217,7 @@
 		diff.y -= y;
 		lastPos = { x: e.screenX, y: e.screenY };
 
-		await Promise.resolve();
-		throttled();
+		throttledDither();
 	}
 
 	function cancelDrag() {
@@ -349,7 +357,7 @@
 				max="1.7"
 				step={1 / 25}
 				bind:value={brightness}
-				on:input={throttled}
+				on:input={throttledDither}
 			/>
 			<label for="brightness">Helligkeit</label>
 		</span>
@@ -362,7 +370,7 @@
 				max={2.3}
 				step={1 / 25}
 				bind:value={saturation}
-				on:input={throttled}
+				on:input={throttledDither}
 			/>
 			<label for="saturation">Sättigung</label>
 		</span>
