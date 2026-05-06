@@ -5,5 +5,4 @@ export interface ISettings {
 	deleteCurrent: boolean;
 	syncNow: boolean;
 	clearLog: boolean;
-	deviceId: string;
 }

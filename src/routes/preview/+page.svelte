@@ -4,7 +4,6 @@
 	import Carousel from 'svelte-carousel';
 
 	export let data: PageData;
-	let deviceId = 'default';
 	let busyAction = '';
 	let message = '';
 	let messageType: 'ok' | 'error' = 'ok';
@@ -55,7 +54,7 @@
 			const response = await fetch('/command', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ key: data.keys![currentPageIndex], deviceId: deviceId.trim() || 'default' })
+				body: JSON.stringify({ key: data.keys![currentPageIndex] })
 			});
 			await parseResponse(response);
 			setMessage('Bild an den Rahmen gesendet.');
@@ -89,8 +88,6 @@
 					<pre>{(index + 1).toString().padStart(pagesCount.toString().length, '0')}/{pagesCount}</pre>
 				</div>
 				<form on:submit|preventDefault={() => showCurrent(index)}>
-					<label for="deviceId">Device ID</label>
-					<input type="text" id="deviceId" bind:value={deviceId} />
 					<button type="submit" disabled={busyAction !== ''}>
 						{busyAction === 'show' ? 'Sende...' : 'Anzeigen'}
 					</button>
@@ -152,21 +149,8 @@
 		gap: 0.4rem;
 	}
 
-	form > label,
-	form > input {
-		flex: 1 1 100%;
-		text-align: center;
-	}
-
-	form > input {
-		padding: 8px;
-		font: inherit;
-		border-radius: 8px;
-		border: 1px solid rgba(17, 24, 39, 0.3);
-	}
-
 	form > button {
-		flex: 1 1 33%;
+		flex: 1 1 40%;
 	}
 
 	button {

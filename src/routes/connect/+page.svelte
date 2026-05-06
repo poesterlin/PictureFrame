@@ -3,7 +3,6 @@
 
 	let ssid = '';
 	let password = '';
-	let deviceId = 'default';
 	let logs: string[] = [];
 	let status = 'Bereit';
 	let isProvisioning = false;
@@ -70,8 +69,7 @@
 			const payload = {
 				type: 'wifiProvision',
 				ssid: ssid.trim(),
-				password,
-				deviceId: deviceId.trim() || 'default'
+				password
 			};
 			await characteristic.writeValue(encoder.encode(JSON.stringify(payload)));
 			status = `WLAN-Provisioning gesendet an ${connectedDeviceName}.`;
@@ -132,10 +130,6 @@
 		<div class="field-row">
 			<label for="ssid">SSID</label>
 			<input type="text" id="ssid" bind:value={ssid} autocomplete="off" required />
-		</div>
-		<div class="field-row">
-			<label for="deviceId">Device ID</label>
-			<input type="text" id="deviceId" bind:value={deviceId} autocomplete="off" />
 		</div>
 		<div class="field-row">
 			<label for="password">Passwort</label>

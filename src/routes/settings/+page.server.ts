@@ -1,5 +1,4 @@
-import {
-	resolveDeviceId,
+import type {
 	type DeviceCommandMessage,
 	type DisplayUpdateMessage
 } from '$lib/device-contract';
@@ -21,10 +20,8 @@ export const actions: Actions = {
 			return;
 		}
 
-		const deviceId = resolveDeviceId(values.deviceId);
 		const settings: DeviceCommandMessage = {
-			type: 'command',
-			deviceId
+			type: 'command'
 		};
 
 		if (typeof values.deleteCurrent === 'boolean') {
@@ -49,7 +46,6 @@ export const actions: Actions = {
 			if (artifactKey) {
 				const displayMessage: DisplayUpdateMessage = {
 					type: 'display',
-					deviceId,
 					requestId: crypto.randomUUID(),
 					createdAt: new Date().toISOString(),
 					artifactKey

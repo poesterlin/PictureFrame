@@ -24,7 +24,6 @@ bool settings_store_init(void) {
 
 static void set_defaults(frame_settings_t *settings) {
 	memset(settings, 0, sizeof(*settings));
-	strncpy(settings->device_id, "default", sizeof(settings->device_id) - 1);
 	settings->refresh_every_seconds = 600;
 }
 
@@ -38,13 +37,7 @@ bool settings_store_load(frame_settings_t *settings) {
 		return true;
 	}
 
-	size_t size = sizeof(settings->device_id);
-	err = nvs_get_str(handle, "device_id", settings->device_id, &size);
-	if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-		ESP_LOGW(TAG, "failed loading device_id");
-	}
-
-	size = sizeof(settings->wifi_ssid);
+	size_t size = sizeof(settings->wifi_ssid);
 	err = nvs_get_str(handle, "wifi_ssid", settings->wifi_ssid, &size);
 	if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
 		ESP_LOGW(TAG, "failed loading wifi_ssid");
@@ -74,7 +67,6 @@ bool settings_store_save(const frame_settings_t *settings) {
 		return false;
 	}
 
-	ESP_ERROR_CHECK(nvs_set_str(handle, "device_id", settings->device_id));
 	ESP_ERROR_CHECK(nvs_set_str(handle, "wifi_ssid", settings->wifi_ssid));
 	ESP_ERROR_CHECK(nvs_set_str(handle, "wifi_pw", settings->wifi_password));
 	ESP_ERROR_CHECK(nvs_set_u32(handle, "refresh", settings->refresh_every_seconds));

@@ -3,7 +3,12 @@
 const BUS_KEY = '__pictureframe_device_bus__';
 
 function createDeviceBus() {
-	const state = new Map();
+	const state = {
+		connections: new Set(),
+		latestDisplay: null,
+		pendingCommands: [],
+		lastState: null
+	};
 	const log = (event, details = {}) => {
 		console.log('[device-bus]', JSON.stringify({
 			at: new Date().toISOString(),
@@ -12,93 +17,69 @@ function createDeviceBus() {
 		}));
 	};
 
-	function getOrCreate(deviceId) {
-		if (!state.has(deviceId)) {
-			state.set(deviceId, {
-				connections: new Set(),
-				latestDisplay: null,
-				pendingCommands: [],
-				lastState: null
-			});
-		}
-		return state.get(deviceId);
-	}
-
 	function toJson(payload) {
 		return JSON.stringify(payload);
 	}
 
 	return {
-		registerConnection(deviceId, connection) {
-			const device = getOrCreate(deviceId);
-			device.connections.add(connection);
+		registerConnection(connection) {
+			state.connections.add(connection);
 			log('connection-register', {
-				deviceId,
-				connectionCount: device.connections.size
+				connectionCount: state.connections.size
 			});
 			return () => {
-				device.connections.delete(connection);
+				state.connections.delete(connection);
 				log('connection-unregister', {
-					deviceId,
-					connectionCount: device.connections.size
+					connectionCount: state.connections.size
 				});
 			};
 		},
 		publishDisplay(message) {
-			const device = getOrCreate(message.deviceId);
-			device.latestDisplay = message;
+			state.latestDisplay = message;
 			log('display-publish', {
-				deviceId: message.deviceId,
 				artifactKey: message.artifactKey,
-				connectionCount: device.connections.size
+				connectionCount: state.connections.size
 			});
 			const wire = toJson(message);
-			for (const connection of device.connections) {
+			for (const connection of state.connections) {
 				connection.send(wire);
 			}
 		},
 		publishCommand(message) {
-			const device = getOrCreate(message.deviceId);
-			device.pendingCommands.push(message);
-			if (device.pendingCommands.length > 50) {
-				device.pendingCommands.shift();
+			state.pendingCommands.push(message);
+			if (state.pendingCommands.length > 50) {
+				state.pendingCommands.shift();
 			}
 			log('command-publish', {
-				deviceId: message.deviceId,
-				connectionCount: device.connections.size
+				connectionCount: state.connections.size
 			});
 			const wire = toJson(message);
-			for (const connection of device.connections) {
+			for (const connection of state.connections) {
 				connection.send(wire);
 			}
 		},
-		getSnapshot(deviceId) {
-			const device = getOrCreate(deviceId);
+		getSnapshot() {
 			return {
 				type: 'helloAck',
-				deviceId,
 				serverTime: new Date().toISOString(),
 				pending: {
-					display: device.latestDisplay,
-					commands: device.pendingCommands
+					display: state.latestDisplay,
+					commands: state.pendingCommands
 				}
 			};
 		},
-		ackPending(deviceId) {
-			const device = getOrCreate(deviceId);
-			device.pendingCommands = [];
+		ackPending() {
+			state.pendingCommands = [];
 		},
-		updateState(deviceId, payload) {
-			const device = getOrCreate(deviceId);
-			device.lastState = payload;
+		updateState(payload) {
+			state.lastState = payload;
 			log('state-update', {
-				deviceId,
 				type: payload?.type ?? 'unknown',
 				status: payload?.status ?? null
 			});
 		},
-		getLastState(deviceId) {
-			return getOrCreate(deviceId).lastState;
+		getLastState() {
+			return state.lastState;
 		}
 	};
 }

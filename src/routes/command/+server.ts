@@ -1,7 +1,6 @@
-import {
-	resolveDeviceId,
-	type DeviceCommandMessage,
-	type DisplayUpdateMessage
+import type {
+	DeviceCommandMessage,
+	DisplayUpdateMessage
 } from '$lib/device-contract';
 import type { RequestHandler } from '@sveltejs/kit';
 import { getDeviceBus } from '../../../realtime/device-bus.js';
@@ -11,7 +10,6 @@ const bus = getDeviceBus();
 
 export const POST: RequestHandler = async ({ request }) => {
 	const body = (await request.json()) as Record<string, unknown>;
-	const deviceId = resolveDeviceId(body.deviceId as string | undefined);
 
 	if (typeof body.key === 'string' || typeof body.artifactKey === 'string') {
 		const resolvedArtifactKey = typeof body.artifactKey === 'string'
@@ -19,7 +17,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			: (body.key as string).replace(/\.[^./]+$/i, '.pf7a');
 		const message: DisplayUpdateMessage = {
 			type: 'display',
-			deviceId,
 			requestId: typeof body.requestId === 'string' ? body.requestId : crypto.randomUUID(),
 			createdAt: new Date().toISOString(),
 			artifactKey: resolvedArtifactKey,
@@ -39,7 +36,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 			bus.publishDisplay({
 				type: 'display',
-				deviceId,
 				requestId: crypto.randomUUID(),
 				createdAt: new Date().toISOString(),
 				artifactKey
@@ -49,7 +45,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const message: DeviceCommandMessage = {
 			type: 'command',
-			deviceId,
 			[body.command]: true
 		} as DeviceCommandMessage;
 		bus.publishCommand(message);

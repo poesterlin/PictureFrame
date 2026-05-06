@@ -53,9 +53,9 @@ static void ws_event_handler(
 	}
 }
 
-bool frame_ws_init(const char *base_ws_url, const char *device_id, ws_message_handler_t handler) {
+bool frame_ws_init(const char *base_ws_url, ws_message_handler_t handler) {
 	s_message_handler = handler;
-	snprintf(s_ws_url, sizeof(s_ws_url), "%s?deviceId=%s", base_ws_url, device_id);
+	snprintf(s_ws_url, sizeof(s_ws_url), "%s", base_ws_url);
 
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = s_ws_url,

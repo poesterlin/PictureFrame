@@ -8,8 +8,8 @@ This runbook replaces the Raspberry Pi runtime with one ESP32-S3 pilot device an
 2. Set menuconfig values:
    - WebSocket base URL
    - Frame asset base URL
-3. Open `/connect` and provision Wi-Fi credentials and `deviceId`.
-4. Confirm device connects to: `wss://<host>/ws?deviceId=<deviceId>`
+3. Open `/connect` and provision Wi-Fi credentials.
+4. Confirm device connects to: `wss://<host>/ws`
 
 ## 2) Validation Matrix
 
@@ -35,8 +35,8 @@ This runbook replaces the Raspberry Pi runtime with one ESP32-S3 pilot device an
 
 ## 3) Production Cutover
 
-1. Point production device(s) to ESP32 hardware and unique `deviceId`s.
-2. Use only `/ws?deviceId=<deviceId>` channels in operations tooling.
+1. Point production device(s) to ESP32 hardware.
+2. Use only `/ws` channels in operations tooling.
 3. Keep `update-service/` available for rollback during first week.
 4. Disable Pi host automation jobs (cron/pm2) after pilot acceptance.
 5. Keep `update-service/` source as legacy reference until final cleanup PR.

@@ -8,8 +8,7 @@
 		refreshNow: false,
 		refreshEvery: 10 * 60,
 		clearLog: false,
-		syncNow: false,
-		deviceId: 'default'
+		syncNow: false
 	};
 
 	let isSaving = false;
@@ -99,14 +98,6 @@
 
 		<div class="group">
 			<a class="link-tile" href="/connect">WLAN verbinden</a>
-			<label for="deviceId">Device ID</label>
-			<input
-				type="text"
-				id="deviceId"
-				bind:value={settings.deviceId}
-				placeholder="default"
-				autocomplete="off"
-			/>
 		</div>
 
 		<div class="group">
@@ -256,15 +247,7 @@
 		color: #2f3a48;
 	}
 
-	input[type='text'] {
-		padding: 0.7rem 0.8rem;
-		font: inherit;
-		border-radius: 10px;
-		border: 1px solid rgba(17, 24, 39, 0.24);
-		background: #fff;
-	}
-
-	input[type='text']:focus-visible,
+	input[type='range']:focus-visible,
 	button:focus-visible,
 	a:focus-visible {
 		outline: 3px solid rgba(255, 68, 68, 0.34);

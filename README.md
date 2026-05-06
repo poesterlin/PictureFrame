@@ -24,7 +24,6 @@ npm run start
 
 Environment variables:
 
-- `DEVICE_ID` (optional, defaults to `default`)
 - `PORT` (optional, default `3000` for self-hosted server)
 - `FRAMES_DIR` (optional, default `<repo>/data/frames`)
 
@@ -39,7 +38,7 @@ Build instructions and protocol details:
 
 ## Device Protocol (v1)
 
-- WebSocket endpoint: `/ws?deviceId=<deviceId>`
+- WebSocket endpoint: `/ws`
 - Server sends `display` and `command` messages
 - Device sends `state`, `log`, and `ack` messages
 - Frame artifacts are served from `GET /frames/<owner>/<id>.pf7a`

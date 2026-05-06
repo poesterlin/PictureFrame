@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 typedef struct {
-	char device_id[32];
 	char wifi_ssid[64];
 	char wifi_password[64];
 	uint32_t refresh_every_seconds;

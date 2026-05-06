@@ -7,7 +7,7 @@ This firmware replaces the Raspberry Pi `update-service` runtime.
 - Target: ESP32-S3 + 7.3" 7-color panel
 - Transport: WebSocket + HTTPS frame download
 - Provisioning: BLE (`ec00` service, `ec0e` write, `ec0f` log read)
-- Storage: only settings in NVS (Wi-Fi, refresh interval, device ID)
+- Storage: only settings in NVS (Wi-Fi, refresh interval)
 - Offline behavior: no frame history, no download queue, no persistent image cache
 
 ## XIAO ESP32-S3 / ESP32-C6 Build Guide
@@ -78,7 +78,7 @@ idf.py build
 
 ## Protocol
 
-- WebSocket endpoint: `wss://<host>/ws?deviceId=<deviceId>`
+- WebSocket endpoint: `wss://<host>/ws`
 - Server sends `display` and `command` messages
 - Device sends `state`, `log`, and `ack` messages
 
@@ -87,7 +87,6 @@ Display update payload:
 ```json
 {
   "type": "display",
-  "deviceId": "default",
   "requestId": "abc123",
   "createdAt": "2026-04-29T09:00:00.000Z",
   "artifactKey": "submitions/user/abc123.pf7a",

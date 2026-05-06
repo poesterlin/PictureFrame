@@ -244,9 +244,9 @@ void app_main(void) {
 	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
 	}
-	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, s_settings.device_id, ws_message_handler) ? ESP_OK : ESP_FAIL);
+	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, ws_message_handler) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);
-	ESP_LOGI(TAG, "connected to websocket as deviceId=%s", s_settings.device_id);
+	ESP_LOGI(TAG, "connected to websocket");
 
 	xTaskCreate(refresh_task, "refresh_task", 4096, NULL, 5, NULL);
 }

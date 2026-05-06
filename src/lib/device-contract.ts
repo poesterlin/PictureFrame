@@ -1,5 +1,4 @@
 export const DEVICE_PROTOCOL_VERSION = 1;
-export const DEFAULT_DEVICE_ID = 'default';
 
 export const bleProfile = {
 	serviceUuid: '0000ec00-0000-1000-8000-00805f9b34fb',
@@ -16,7 +15,6 @@ export const frameFormat = {
 
 export interface DisplayUpdateMessage {
 	type: 'display';
-	deviceId: string;
 	requestId: string;
 	createdAt: string;
 	artifactKey: string;
@@ -25,7 +23,6 @@ export interface DisplayUpdateMessage {
 
 export interface DeviceCommandMessage {
 	type: 'command';
-	deviceId: string;
 	refreshEvery?: number;
 	reboot?: boolean;
 	refreshNow?: boolean;
@@ -34,10 +31,6 @@ export interface DeviceCommandMessage {
 	deleteCurrent?: boolean;
 }
 
-export function resolveDeviceId(raw: string | undefined) {
-	return raw?.trim() || DEFAULT_DEVICE_ID;
-}
-
-export function websocketPath(deviceId: string) {
-	return `/ws?deviceId=${encodeURIComponent(deviceId)}`;
+export function websocketPath() {
+	return '/ws';
 }

@@ -51,7 +51,6 @@ static bool ble_provisioning_handle_write(const char *json_payload) {
 	cJSON *type = cJSON_GetObjectItem(root, "type");
 	cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
 	cJSON *password = cJSON_GetObjectItem(root, "password");
-	cJSON *device_id = cJSON_GetObjectItem(root, "deviceId");
 
 	if (!cJSON_IsString(type) || strcmp(type->valuestring, "wifiProvision") != 0) {
 		cJSON_Delete(root);
@@ -67,11 +66,6 @@ static bool ble_provisioning_handle_write(const char *json_payload) {
 			s_settings->wifi_password, password->valuestring, sizeof(s_settings->wifi_password) - 1);
 		s_settings->wifi_password[sizeof(s_settings->wifi_password) - 1] = '\0';
 	}
-	if (cJSON_IsString(device_id)) {
-		strncpy(s_settings->device_id, device_id->valuestring, sizeof(s_settings->device_id) - 1);
-		s_settings->device_id[sizeof(s_settings->device_id) - 1] = '\0';
-	}
-
 	if (s_handler != NULL) {
 		s_handler(s_settings);
 	}

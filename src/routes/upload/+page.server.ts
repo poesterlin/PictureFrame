@@ -1,7 +1,7 @@
 import type { Actions } from './$types';
 import sharp from 'sharp';
 import type { color } from '$lib/dither';
-import { frameFormat, resolveDeviceId, type DisplayUpdateMessage } from '$lib/device-contract';
+import { frameFormat, type DisplayUpdateMessage } from '$lib/device-contract';
 import { getDeviceBus } from '../../../realtime/device-bus.js';
 import { storeFrameArtifacts } from '../../../realtime/frame-storage.js';
 
@@ -22,7 +22,6 @@ export const actions: Actions = {
 		const txt = await dither(Buffer.from(blob));
 		const frame = encodeFrameArtifact(txt, frameFormat.width, frameFormat.height);
 		const normalizedRequestId = requestId.replace('.', '');
-		const deviceId = resolveDeviceId(values.get('deviceId') as string);
 
 		const stored = await storeFrameArtifacts(
 			name,
@@ -34,7 +33,6 @@ export const actions: Actions = {
 
 		const updateMessage: DisplayUpdateMessage = {
 			type: 'display',
-			deviceId,
 			requestId: normalizedRequestId,
 			createdAt: new Date().toISOString(),
 			artifactKey: stored.artifactKey
