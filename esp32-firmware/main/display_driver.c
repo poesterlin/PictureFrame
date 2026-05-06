@@ -7,6 +7,7 @@
 #include "driver/spi_master.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -18,12 +19,12 @@ static const uint16_t PANEL_HEIGHT = 480;
 static const size_t PANEL_BUFFER_SIZE = (PANEL_WIDTH / 2) * PANEL_HEIGHT;
 
 // XIAO ESP32-S3 wiring documented in esp32-firmware/README.md.
-static const gpio_num_t PIN_SCLK = GPIO_NUM_12;
-static const gpio_num_t PIN_MOSI = GPIO_NUM_11;
-static const gpio_num_t PIN_CS = GPIO_NUM_10;
-static const gpio_num_t PIN_DC = GPIO_NUM_9;
-static const gpio_num_t PIN_RST = GPIO_NUM_8;
-static const gpio_num_t PIN_BUSY = GPIO_NUM_7;
+static const gpio_num_t PIN_SCLK = GPIO_NUM_7;
+static const gpio_num_t PIN_MOSI = GPIO_NUM_9;
+static const gpio_num_t PIN_CS = GPIO_NUM_2;
+static const gpio_num_t PIN_DC = GPIO_NUM_4;
+static const gpio_num_t PIN_RST = GPIO_NUM_1;
+static const gpio_num_t PIN_BUSY = GPIO_NUM_6;
 
 static spi_device_handle_t s_spi;
 static bool s_bus_ready;
@@ -68,11 +69,26 @@ static bool epd_send_data_byte(uint8_t value) {
 }
 
 static bool epd_send_data_buffer(const uint8_t *buffer, size_t len) {
-	// Keep command/data write timing and CS strobes close to Waveshare reference driver.
-	for (size_t i = 0; i < len; i++) {
-		if (!epd_send_data_byte(buffer[i])) {
+	if (buffer == NULL || len == 0) {
+		return false;
+	}
+	if (!gpio_write(PIN_DC, 1) || !gpio_write(PIN_CS, 0)) {
+		return false;
+	}
+	const size_t chunk_size = 512;
+	for (size_t offset = 0; offset < len; offset += chunk_size) {
+		size_t chunk_len = len - offset;
+		if (chunk_len > chunk_size) {
+			chunk_len = chunk_size;
+		}
+		if (!epd_spi_write(buffer + offset, chunk_len)) {
+			gpio_write(PIN_CS, 1);
 			return false;
 		}
+		vTaskDelay(1);
+	}
+	if (!gpio_write(PIN_CS, 1)) {
+		return false;
 	}
 	return true;
 }
@@ -82,12 +98,10 @@ static bool epd_wait_busy_idle_level(void) {
 		vTaskDelay(pdMS_TO_TICKS(200));
 		return true;
 	}
-	const int max_wait_ms = 30000;
-	int waited = 0;
+	const int64_t deadline_us = esp_timer_get_time() + (30 * 1000 * 1000LL);
 	while (gpio_get_level(PIN_BUSY) != s_busy_idle_level) {
-		vTaskDelay(pdMS_TO_TICKS(1));
-		waited += 1;
-		if (waited >= max_wait_ms) {
+		vTaskDelay(1);
+		if (esp_timer_get_time() >= deadline_us) {
 			ESP_LOGE(
 				TAG,
 				"busy wait timed out (idle_level=%d current_level=%d)",
@@ -117,6 +131,7 @@ static bool epd_reset(void) {
 }
 
 static bool epd_turn_on_display(void) {
+	ESP_LOGI(TAG, "POWER_ON command (busy=%d)", gpio_get_level(PIN_BUSY));
 	if (!epd_send_command(0x04)) {
 		return false;
 	}
@@ -126,7 +141,9 @@ static bool epd_turn_on_display(void) {
 	} else if (!epd_wait_busy_idle_level()) {
 		return false;
 	}
+	ESP_LOGI(TAG, "POWER_ON complete (busy=%d)", gpio_get_level(PIN_BUSY));
 
+	ESP_LOGI(TAG, "DISPLAY_REFRESH command (busy=%d)", gpio_get_level(PIN_BUSY));
 	if (!epd_send_command(0x12) || !epd_send_data_byte(0x00)) {
 		return false;
 	}
@@ -135,7 +152,9 @@ static bool epd_turn_on_display(void) {
 	} else if (!epd_wait_busy_idle_level()) {
 		return false;
 	}
+	ESP_LOGI(TAG, "DISPLAY_REFRESH complete (busy=%d)", gpio_get_level(PIN_BUSY));
 
+	ESP_LOGI(TAG, "POWER_OFF command (busy=%d)", gpio_get_level(PIN_BUSY));
 	if (!epd_send_command(0x02) || !epd_send_data_byte(0x00)) {
 		return false;
 	}
@@ -144,6 +163,7 @@ static bool epd_turn_on_display(void) {
 	} else if (!epd_wait_busy_idle_level()) {
 		return false;
 	}
+	ESP_LOGI(TAG, "POWER_OFF complete (busy=%d)", gpio_get_level(PIN_BUSY));
 	return true;
 }
 
@@ -259,6 +279,9 @@ static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t wid
 			ESP_LOGE(TAG, "failed writing frame row %u", (unsigned)row);
 			return false;
 		}
+		if ((row % 8) == 0) {
+			vTaskDelay(1);
+		}
 	}
 	if (!epd_turn_on_display()) {
 		ESP_LOGE(TAG, "display refresh failed");
@@ -276,6 +299,16 @@ bool display_driver_init(void) {
 	if (s_bus_ready) {
 		return true;
 	}
+	ESP_LOGI(
+		TAG,
+		"pin map sclk=%d mosi=%d cs=%d dc=%d rst=%d busy=%d",
+		PIN_SCLK,
+		PIN_MOSI,
+		PIN_CS,
+		PIN_DC,
+		PIN_RST,
+		PIN_BUSY
+	);
 
 	const gpio_config_t out_cfg = {
 		.pin_bit_mask = (1ULL << PIN_CS) | (1ULL << PIN_DC) | (1ULL << PIN_RST),
@@ -320,7 +353,7 @@ bool display_driver_init(void) {
 	spi_device_interface_config_t dev_cfg = {
 		.mode = 0,
 		// Use a conservative SPI clock for wiring/switch-board tolerance during bring-up.
-		.clock_speed_hz = 2 * 1000 * 1000,
+		.clock_speed_hz = 500 * 1000,
 		.spics_io_num = -1, // software-controlled CS
 		.queue_size = 1
 	};
@@ -415,5 +448,19 @@ bool display_driver_render_checkerboard(void) {
 		return false;
 	}
 	ESP_LOGI(TAG, "rendered offline checkerboard");
+	return true;
+}
+
+bool display_driver_render_solid_test(uint8_t color) {
+	if (!s_bus_ready || s_panel_buffer == NULL) {
+		ESP_LOGW(TAG, "solid test skipped (display not ready)");
+		return false;
+	}
+	uint8_t packed = (uint8_t)((normalize_color(color) << 4) | normalize_color(color));
+	memset(s_panel_buffer, packed, PANEL_BUFFER_SIZE);
+	if (!epd_display_packed_buffer(s_panel_buffer, PANEL_WIDTH, PANEL_HEIGHT)) {
+		return false;
+	}
+	ESP_LOGI(TAG, "rendered solid test color=%u", color);
 	return true;
 }

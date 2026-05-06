@@ -10,20 +10,26 @@ This firmware replaces the Raspberry Pi `update-service` runtime.
 - Storage: only settings in NVS (Wi-Fi, refresh interval, device ID)
 - Offline behavior: no frame history, no download queue, no persistent image cache
 
-## XIAO ESP32-S3 Build Guide
+## XIAO ESP32-S3 / ESP32-C6 Build Guide
 
 ### 1) Wire the e-paper module
 
-Suggested wiring for Seeed Studio XIAO ESP32-S3:
+Current wiring for the XIAO ESP32-C6 e-paper breakout:
 
 - `VCC` -> `3V3` (or module-required supply voltage)
 - `GND` -> `GND`
-- `SCLK` -> `GPIO12`
-- `DIN` -> `GPIO11`
-- `CS` -> `GPIO10`
-- `DC` -> `GPIO9`
-- `RST` -> `GPIO8`
-- `BUSY` -> `GPIO7`
+- `SCLK` -> `GPIO7`
+- `DIN` -> `GPIO9`
+- `CS` -> `GPIO2`
+- `DC` -> `GPIO4`
+- `RST` -> `GPIO1`
+- `BUSY` -> `GPIO6`
+
+Use the display/HAT in **4-line SPI** mode. The legacy Raspberry Pi driver uses separate SPI data plus `CS`, `DC`, `RST`, and `BUSY` control lines; 3-line SPI is not compatible with this firmware wiring.
+
+Important: on XIAO-style boards, printed pin names like `D7`, `D8`, etc. are not always the same thing as ESP-IDF `GPIO_NUM_7`, `GPIO_NUM_8`, etc. Wire to the actual ESP32-S3 GPIO numbers used in `main/display_driver.c`, or update those constants to match the physical pins you used.
+
+The firmware renders a checkerboard during startup before Wi-Fi provisioning. If the serial monitor logs `display initialized for Waveshare 7.3in 7-color` and `rendered offline checkerboard` but the panel does not change, suspect power, SPI/control wiring, or pin-number mismatch before network/protocol issues.
 
 ### 2) Build and flash
 
@@ -33,6 +39,8 @@ Suggested wiring for Seeed Studio XIAO ESP32-S3:
 
 cd esp32-firmware
 idf.py set-target esp32s3
+# or, for the current ESP32-C6 board:
+idf.py set-target esp32c6
 idf.py menuconfig
 idf.py build
 idf.py -p /dev/ttyACM0 flash
