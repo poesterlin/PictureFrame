@@ -2,7 +2,7 @@ import { dev } from '$app/environment';
 import { error, type RequestHandler } from '@sveltejs/kit';
 import Jimp from 'jimp';
 import { promises as fs } from 'node:fs';
-import { resolveFrameAbsolutePath } from '../../../../realtime/frame-storage.js';
+import { normalizeFrameArtifactPayload, resolveFrameAbsolutePath } from '../../../../realtime/frame-storage.js';
 
 const palette = [
     toHex(0, 0, 0),
@@ -40,10 +40,11 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	let array = await fs.readFile(filePath);
 	if (key.toLowerCase().endsWith('.pf7a')) {
-		if (array.length < 8) {
+		const normalized = normalizeFrameArtifactPayload(array);
+		if (!normalized) {
 			throw error(400, 'invalid pf7a file');
 		}
-		array = array.subarray(8);
+		array = normalized.subarray(8);
 	}
 
 	const imageData = Array.from(array).map((color) => palette[color] ?? palette[0]);

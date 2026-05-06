@@ -8,6 +8,7 @@ import { handler } from '../build/handler.js';
 import { getDeviceBus } from '../realtime/device-bus.js';
 import {
 	ensureFramesDir,
+	ensureFrameArtifactFile,
 	pickRandomArtifactKey,
 	resolveFrameAbsolutePath
 } from '../realtime/frame-storage.js';
@@ -40,7 +41,14 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 		try {
-			const payload = await fs.readFile(absolutePath);
+			const payload = absolutePath.endsWith('.pf7a')
+				? await ensureFrameArtifactFile(absolutePath)
+				: await fs.readFile(absolutePath);
+			if (!payload) {
+				res.statusCode = 400;
+				res.end('invalid frame artifact');
+				return;
+			}
 			if (absolutePath.endsWith('.pf7a')) {
 				res.setHeader('content-type', 'application/octet-stream');
 			} else if (absolutePath.endsWith('.txt')) {
