@@ -4,181 +4,276 @@
 	let ssid = '';
 	let password = '';
 	let deviceId = 'default';
-
 	let logs: string[] = [];
+	let status = 'Bereit';
+	let isProvisioning = false;
+	let isLoadingLogs = false;
+	let connectedDeviceName = '';
 
-	async function onButtonClick() {
+	type BleContext = {
+		device: BluetoothDevice;
+		server: BluetoothRemoteGATTServer;
+		service: BluetoothRemoteGATTService;
+	};
+
+	async function withBleContext() {
+		if (!navigator.bluetooth) {
+			throw new Error('Web Bluetooth wird von diesem Browser nicht unterstuetzt.');
+		}
+
+		status = 'Suche nach Geraet...';
 		const device = await navigator.bluetooth.requestDevice({
 			filters: [{ services: [bleProfile.serviceUuid] }]
 		});
-		console.log(device);
 
-		if (!device?.gatt?.connect) {
-			console.log('no gatt connect');
-			return;
+		if (!device.gatt?.connect) {
+			throw new Error('GATT Verbindung ist nicht verfuegbar.');
 		}
 
+		status = 'Verbinde...';
 		const server = await device.gatt.connect();
 		if (!server.connected) {
-			console.log('not connected', server);
-			return;
+			throw new Error('Bluetooth-Verbindung fehlgeschlagen.');
 		}
-		console.log('connected', server);
 
 		const service = await server.getPrimaryService(bleProfile.serviceUuid);
-		console.log('service', service);
+		connectedDeviceName = device.name || 'Unbekanntes Geraet';
+		return { device, server, service } as BleContext;
+	}
 
-		const characteristics = await service.getCharacteristics();
-		console.log('characteristics', characteristics);
+	function disconnect(context: BleContext | undefined) {
+		if (context?.device.gatt?.connected) {
+			context.device.gatt.disconnect();
+		}
+	}
 
-		const characteristic = await service.getCharacteristic(bleProfile.wifiWriteCharacteristicUuid);
-		console.log('characteristic', characteristic);
+	async function onProvision(event: SubmitEvent) {
+		event.preventDefault();
 
-		// subscribe to characteristic
-		characteristic.addEventListener('characteristicvaluechanged', (event) => {
-			console.log('value', event);
-		});
+		if (!ssid.trim()) {
+			status = 'SSID fehlt.';
+			return;
+		}
 
-		// write to characteristic
-		const encoder = new TextEncoder();
-		const data = { type: 'wifiProvision', ssid, password, deviceId };
-		const value = encoder.encode(JSON.stringify(data));
-		await characteristic.writeValue(value);
+		isProvisioning = true;
+		let context: BleContext | undefined;
+
+		try {
+			context = await withBleContext();
+			status = 'Uebertrage WLAN-Daten...';
+
+			const characteristic = await context.service.getCharacteristic(
+				bleProfile.wifiWriteCharacteristicUuid
+			);
+
+			const encoder = new TextEncoder();
+			const payload = {
+				type: 'wifiProvision',
+				ssid: ssid.trim(),
+				password,
+				deviceId: deviceId.trim() || 'default'
+			};
+			await characteristic.writeValue(encoder.encode(JSON.stringify(payload)));
+			status = `WLAN-Provisioning gesendet an ${connectedDeviceName}.`;
+		} catch (error) {
+			status = error instanceof Error ? error.message : 'Provisioning fehlgeschlagen.';
+		} finally {
+			disconnect(context);
+			isProvisioning = false;
+		}
 	}
 
 	async function getLogs() {
-		const device = await navigator.bluetooth.requestDevice({
-			filters: [{ services: [bleProfile.serviceUuid] }]
-		});
-		console.log(device);
+		isLoadingLogs = true;
+		let context: BleContext | undefined;
 
-		if (!device?.gatt?.connect) {
-			console.log('no gatt connect');
-			return;
+		try {
+			context = await withBleContext();
+			status = 'Lese Logs...';
+
+			const characteristic = await context.service.getCharacteristic(
+				bleProfile.logReadCharacteristicUuid
+			);
+			const logBuffer = await characteristic.readValue();
+			const decoder = new TextDecoder();
+			logs = decoder
+				.decode(logBuffer)
+				.split('\n')
+				.map((entry) => entry.trim())
+				.filter(Boolean);
+
+			status = `Logs geladen von ${connectedDeviceName}.`;
+		} catch (error) {
+			status = error instanceof Error ? error.message : 'Logs konnten nicht geladen werden.';
+		} finally {
+			disconnect(context);
+			isLoadingLogs = false;
 		}
-
-		const server = await device.gatt.connect();
-		if (!server.connected) {
-			console.log('not connected', server);
-			return;
-		}
-		console.log('connected', server);
-
-		const service = await server.getPrimaryService(bleProfile.serviceUuid);
-		console.log('service', service);
-
-		const characteristics = await service.getCharacteristics();
-		console.log('characteristics', characteristics);
-
-		const characteristic = await service.getCharacteristic(bleProfile.logReadCharacteristicUuid);
-
-		// subscribe to characteristic
-		characteristic.addEventListener('characteristicvaluechanged', (event) => {
-			console.log('value', event);
-		});
-
-		const logBuffer = await characteristic.readValue();
-		const decoder = new TextDecoder();
-		const logString = decoder.decode(logBuffer);
-		logs = logString.split('\n');
 	}
 
-	function formatLog(log: string) {
+	function parseLog(log: string) {
 		const [isoDate, ...message] = log.split(' ');
-		
+
 		const isDateValid = !isNaN(Date.parse(isoDate));
 		if (!isDateValid) {
-			return log;
+			return { time: '', message: log };
 		}
 
 		const date = new Date(isoDate);
-		const time = date.toLocaleTimeString();
-		return `<small>${time}</small> ${message.join(' ')}`;
+		return { time: date.toLocaleTimeString(), message: message.join(' ') };
 	}
 </script>
 
-<section>
-	<h1>WLAN</h1>
-	<form>
-		<div>
-			<label for="ssid">SSID</label>
-			<input type="text" id="ssid" bind:value={ssid} />
-		</div>
-		<div>
-			<label for="deviceId">Device ID</label>
-			<input type="text" id="deviceId" bind:value={deviceId} />
-		</div>
-		<div>
-			<label for="password">Passwort</label>
-			<input type="text" id="password" bind:value={password} />
-		</div>
-		<button on:click={onButtonClick}> Über Bluetooth übertragen </button>
-	</form>
+<section class="connect-wrap">
+	<form class="connect-card" on:submit={onProvision}>
+		<h1>WLAN via Bluetooth</h1>
+		<p class="subtitle">SSID und Passwort direkt an deinen Frame uebertragen.</p>
 
-	<button on:click={getLogs}>Get Logs</button>
+		<div class="field-row">
+			<label for="ssid">SSID</label>
+			<input type="text" id="ssid" bind:value={ssid} autocomplete="off" required />
+		</div>
+		<div class="field-row">
+			<label for="deviceId">Device ID</label>
+			<input type="text" id="deviceId" bind:value={deviceId} autocomplete="off" />
+		</div>
+		<div class="field-row">
+			<label for="password">Passwort</label>
+			<input type="password" id="password" bind:value={password} autocomplete="current-password" />
+		</div>
+
+		<div class="actions">
+			<button type="submit" disabled={isProvisioning || isLoadingLogs}>
+				{isProvisioning ? 'Sende...' : 'Ueber Bluetooth uebertragen'}
+			</button>
+			<button type="button" class="secondary" on:click={getLogs} disabled={isLoadingLogs || isProvisioning}>
+				{isLoadingLogs ? 'Lade Logs...' : 'Logs laden'}
+			</button>
+		</div>
+
+		<p class="status">{status}</p>
+	</form>
 </section>
-<div class="logs">
-	{#each logs as log}
-		<span>
-			{@html formatLog(log)}
-		</span>
-	{/each}
-</div>
+
+{#if logs.length > 0}
+	<div class="logs">
+		{#each logs as log}
+			{@const parsed = parseLog(log)}
+			<div class="log-entry">
+				{#if parsed.time}<small>{parsed.time}</small>{/if}
+				<span>{parsed.message}</span>
+			</div>
+		{/each}
+	</div>
+{/if}
 
 <style>
-	section {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-	}
-	form {
-		display: flex;
-		flex-direction: column;
+	.connect-wrap {
+		display: grid;
+		place-items: center;
+		padding: clamp(1rem, 4vw, 2rem);
 	}
 
-	div {
+	.connect-card {
+		width: min(700px, 100%);
+		display: grid;
+		gap: 0.8rem;
+		padding: clamp(1rem, 3vw, 1.7rem);
+		background: rgba(255, 255, 255, 0.86);
+		border: 1px solid rgba(17, 24, 39, 0.16);
+		border-radius: 18px;
+		box-shadow: 0 24px 55px -38px rgba(0, 0, 0, 0.6);
+	}
+
+	h1 {
+		margin: 0;
+		font-size: clamp(1.35rem, 3vw, 1.9rem);
+	}
+
+	.subtitle {
+		margin: 0;
+		font-size: 0.95rem;
+		color: #4b5563;
+	}
+
+	.field-row {
 		display: flex;
-		flex-direction: row;
+		flex-wrap: wrap;
 		justify-content: space-between;
-		gap: 20px;
+		gap: 0.45rem;
 	}
 
 	label {
-		margin-top: 1rem;
-	}
-
-	div:focus-within > label {
-		font-weight: bold;
+		font-size: 0.88rem;
+		font-weight: 600;
 	}
 
 	input {
-		margin-top: 0.5rem;
-		color: rgb(0, 0, 0);
-		padding: 1rem;
-		letter-spacing: 0.1px;
-		font-size: large;
-		width: 20ch;
+		flex: 1 1 100%;
+		padding: 0.72rem 0.8rem;
+		font: inherit;
+		font-size: 0.94rem;
+		border-radius: 10px;
+		border: 1px solid rgba(17, 24, 39, 0.24);
+		background: #fff;
+	}
+
+	.actions {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 0.65rem;
+		margin-top: 0.2rem;
 	}
 
 	button {
-		margin-top: 1rem;
-		/* modern button */
-		background-color: #4caf50;
-		color: white;
-		padding: 15px 32px;
-		text-align: center;
-		text-decoration: none;
-		display: inline-block;
-		font-weight: bold;
-		border: 1px solid gray;
-		box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.075);
-		letter-spacing: 0.2px;
+		font: inherit;
+		padding: 0.75rem 0.85rem;
+		border-radius: 10px;
+		border: 1px solid #111827;
+		background: #111827;
+		color: #fff;
+		cursor: pointer;
+	}
+
+	button.secondary {
+		background: #f8fafc;
+		color: #111827;
+		border-color: rgba(17, 24, 39, 0.2);
+	}
+
+	button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.logs {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
-		padding: 2rem 20%;
+		gap: 0.45rem;
+		padding: 0 1rem 2rem;
+		width: min(900px, 100%);
+		margin: 0 auto;
+	}
+
+	.log-entry {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.8rem;
+		padding: 0.55rem 0.7rem;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.78);
+		font-size: 0.84rem;
+		border: 1px solid rgba(17, 24, 39, 0.12);
+	}
+
+	small {
+		color: #4b5563;
+	}
+
+	.status {
+		margin: 0.2rem 0 0;
+		font-size: 0.87rem;
+		font-weight: 600;
+		color: #374151;
 	}
 </style>

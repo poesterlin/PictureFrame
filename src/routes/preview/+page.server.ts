@@ -6,6 +6,6 @@ export const prerender = false;
 
 export const load: PageServerLoad = async () => {
 	const keys = await listArtifactKeys();
-	keys.sort().reverse();
+	keys.sort((a, b) => b.localeCompare(a));
 	return { keys };
 };
