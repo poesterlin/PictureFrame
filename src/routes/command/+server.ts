@@ -14,12 +14,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	const deviceId = resolveDeviceId(body.deviceId as string | undefined);
 
 	if (typeof body.key === 'string' || typeof body.artifactKey === 'string') {
+		const resolvedArtifactKey = typeof body.artifactKey === 'string'
+			? body.artifactKey
+			: (body.key as string).replace(/\.[^./]+$/i, '.pf7a');
 		const message: DisplayUpdateMessage = {
 			type: 'display',
 			deviceId,
 			requestId: typeof body.requestId === 'string' ? body.requestId : crypto.randomUUID(),
 			createdAt: new Date().toISOString(),
-			artifactKey: typeof body.artifactKey === 'string' ? body.artifactKey : body.key as string,
+			artifactKey: resolvedArtifactKey,
 			legacyKey: typeof body.key === 'string' ? body.key : undefined
 		};
 		bus.publishDisplay(message);

@@ -37,8 +37,7 @@ export const actions: Actions = {
 			deviceId,
 			requestId: normalizedRequestId,
 			createdAt: new Date().toISOString(),
-			artifactKey: stored.artifactKey,
-			legacyKey: stored.legacyKey
+			artifactKey: stored.artifactKey
 		};
 
 		bus.publishDisplay(updateMessage);

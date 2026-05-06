@@ -117,7 +117,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	});
 
 	const invalidReasonCounts: Record<string, number> = {};
-	const invalidSamples: Array<{ file: string; reason: string; size: number }> = [];
+	const invalidSamples: Array<Record<string, unknown>> = [];
 
 	let invalidArtifactCount = 0;
 	for (const filePath of pfFiles) {

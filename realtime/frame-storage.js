@@ -35,9 +35,7 @@ export async function storeFrameArtifacts(name, requestId, textPayload, framePay
 	const baseDir = path.join(getFramesDir(), owner);
 	await fs.mkdir(baseDir, { recursive: true });
 
-	const txtRelative = path.posix.join('frames', owner, `${fileId}.txt`);
 	const pf7aRelative = path.posix.join('frames', owner, `${fileId}.pf7a`);
-	const txtAbsolute = path.join(getFramesDir(), owner, `${fileId}.txt`);
 	const pf7aAbsolute = path.join(getFramesDir(), owner, `${fileId}.pf7a`);
 
 	const normalizedFramePayload = normalizeFrameArtifactPayload(Buffer.from(framePayload));
@@ -45,11 +43,9 @@ export async function storeFrameArtifacts(name, requestId, textPayload, framePay
 		throw new Error('invalid frame payload');
 	}
 
-	await fs.writeFile(txtAbsolute, textPayload);
 	await fs.writeFile(pf7aAbsolute, normalizedFramePayload);
 
 	return {
-		legacyKey: txtRelative,
 		artifactKey: pf7aRelative
 	};
 }
