@@ -93,7 +93,7 @@ function encodePf7a(pixels) {
 
 /** @param {Buffer} payload */
 function isLegacyIndexedFrame(payload) {
-	return payload.length === FRAME_PIXEL_COUNT && payload.every((value) => value < 7);
+	return payload.length === FRAME_PIXEL_COUNT && payload.every((value) => value < 16);
 }
 
 /** @param {Buffer} payload */
@@ -168,7 +168,7 @@ export function decodeFrameArtifactPayload(payload) {
 				return null;
 			}
 			const value = encoded[inPos++];
-			if (outPos + runLen > FRAME_PIXEL_COUNT || value >= 7) {
+			if (outPos + runLen > FRAME_PIXEL_COUNT || value >= 16) {
 				return null;
 			}
 			out.fill(value, outPos, outPos + runLen);
@@ -180,7 +180,7 @@ export function decodeFrameArtifactPayload(payload) {
 		}
 		for (let i = 0; i < runLen; i++) {
 			const value = encoded[inPos + i];
-			if (value >= 7) {
+			if (value >= 16) {
 				return null;
 			}
 			out[outPos + i] = value;

@@ -32,7 +32,7 @@ test('converts renamed legacy indexed payloads', () => {
 
 test('rejects invalid payloads', () => {
 	assert.equal(normalizeFrameArtifactPayload(Buffer.alloc(10, 1)), null);
-	assert.equal(normalizeFrameArtifactPayload(Buffer.alloc(PIXELS, 9)), null);
+	assert.equal(normalizeFrameArtifactPayload(Buffer.alloc(PIXELS, 16)), null);
 });
 
 test('rewrites legacy files in place', async () => {
