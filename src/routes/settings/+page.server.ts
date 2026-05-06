@@ -1,6 +1,6 @@
 import type {
-	type DeviceCommandMessage,
-	type DisplayUpdateMessage
+	DeviceCommandMessage,
+	DisplayUpdateMessage
 } from '$lib/device-contract';
 import type { Actions } from './$types';
 import type { ISettings } from './settings';

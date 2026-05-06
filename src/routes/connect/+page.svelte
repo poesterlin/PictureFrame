@@ -20,7 +20,7 @@
 			throw new Error('Web Bluetooth wird von diesem Browser nicht unterstuetzt.');
 		}
 
-		status = 'Suche nach Geraet...';
+		status = 'Suche nach Gerät...';
 		const device = await navigator.bluetooth.requestDevice({
 			filters: [{ services: [bleProfile.serviceUuid] }]
 		});
@@ -36,7 +36,7 @@
 		}
 
 		const service = await server.getPrimaryService(bleProfile.serviceUuid);
-		connectedDeviceName = device.name || 'Unbekanntes Geraet';
+		connectedDeviceName = device.name || 'Unbekanntes Gerät';
 		return { device, server, service } as BleContext;
 	}
 
@@ -59,7 +59,7 @@
 
 		try {
 			context = await withBleContext();
-			status = 'Uebertrage WLAN-Daten...';
+			status = 'Übertrage WLAN-Daten...';
 
 			const characteristic = await context.service.getCharacteristic(
 				bleProfile.wifiWriteCharacteristicUuid
@@ -138,7 +138,7 @@
 
 		<div class="actions">
 			<button type="submit" disabled={isProvisioning || isLoadingLogs}>
-				{isProvisioning ? 'Sende...' : 'Ueber Bluetooth uebertragen'}
+				{isProvisioning ? 'Sende...' : 'Über Bluetooth übertragen'}
 			</button>
 			<button type="button" class="secondary" on:click={getLogs} disabled={isLoadingLogs || isProvisioning}>
 				{isLoadingLogs ? 'Lade Logs...' : 'Logs laden'}

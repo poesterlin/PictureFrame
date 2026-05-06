@@ -131,10 +131,10 @@
 		<div class="actions">
 			<button
 				type="button"
-				on:click={() => runAction({ refreshNow: true }, undefined, 'Naechstes Bild angefordert.')}
+				on:click={() => runAction({ refreshNow: true }, undefined, 'Nächstes Bild angefordert.')}
 				disabled={isSaving}
 			>
-				Naechstes Bild
+				Nächstes Bild
 			</button>
 			<button
 				type="button"
@@ -145,23 +145,23 @@
 			</button>
 			<button
 				type="button"
-				on:click={() => runAction({ clearLog: true }, 'Logs wirklich loeschen?', 'Logs geloescht.')}
+				on:click={() => runAction({ clearLog: true }, 'Logs wirklich löschen?', 'Logs gelöscht.')}
 				disabled={isSaving}
 			>
-				Logs loeschen
+				Logs löschen
 			</button>
 			<button
 				type="button"
 				on:click={() =>
 					runAction(
 						{ deleteCurrent: true },
-						'Aktuelles Bild unwiderruflich loeschen?',
-						'Aktuelles Bild geloescht.'
+						'Aktuelles Bild unwiderruflich löschen?',
+						'Aktuelles Bild gelöscht.'
 					)
 				}
 				disabled={isSaving}
 			>
-				Aktuelles Bild loeschen
+				Aktuelles Bild löschen
 			</button>
 			<button
 				type="button"

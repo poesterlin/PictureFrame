@@ -21,7 +21,7 @@
 	}
 
 	async function deleteCurrent(currentPageIndex: number) {
-		if (!confirm('wirklich loeschen?')) {
+		if (!confirm('wirklich löschen?')) {
 			return;
 		}
 
@@ -35,14 +35,14 @@
 			});
 			const json = await parseResponse(response);
 			if (json.ok !== true) {
-				throw new Error('Loeschen konnte nicht bestaetigt werden.');
+				throw new Error('Löschen konnte nicht bestätigt werden.');
 			}
 
 			data.keys!.splice(currentPageIndex, 1);
 			data = data;
-			setMessage('Bild geloescht.');
+			setMessage('Bild gelöscht.');
 		} catch (error) {
-			setMessage(error instanceof Error ? error.message : 'Loeschen fehlgeschlagen.', 'error');
+			setMessage(error instanceof Error ? error.message : 'Löschen fehlgeschlagen.', 'error');
 		} finally {
 			busyAction = '';
 		}
@@ -81,7 +81,7 @@
 				<button class="nav" on:click={showPrevPage} aria-label="Vorheriges Bild"> &lt; </button>
 			</div>
 			<div slot="next">
-				<button class="nav" on:click={showNextPage} aria-label="Naechstes Bild"> &gt; </button>
+				<button class="nav" on:click={showNextPage} aria-label="Nächstes Bild"> &gt; </button>
 			</div>
 			<div slot="dots">
 				<div class="toolbar">
@@ -97,7 +97,7 @@
 						on:click={() => deleteCurrent(index)}
 						disabled={busyAction !== ''}
 					>
-						{busyAction === 'delete' ? 'Loesche...' : 'Loeschen'}
+						{busyAction === 'delete' ? 'Löche...' : 'Löschen'}
 					</button>
 				</form>
 				{#if message}
