@@ -19,4 +19,6 @@ idf_component_register(
         esp_http_client
         esp_websocket_client
         bt
+    EMBED_FILES
+        "known_frame_800x480_packed.bin"
 )

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cJSON.h"
@@ -17,9 +18,16 @@
 static const char *TAG = "pictureframe";
 static frame_settings_t s_settings;
 
+extern const uint8_t _binary_known_frame_800x480_packed_bin_start[];
+extern const uint8_t _binary_known_frame_800x480_packed_bin_end[];
+
 static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
 static const int WIFI_READY_WAIT_MS = 60000;
+
+typedef struct {
+	char artifact_key[256];
+} render_task_arg_t;
 
 static bool starts_with(const char *value, const char *prefix) {
 	return value != NULL && prefix != NULL && strncmp(value, prefix, strlen(prefix)) == 0;
@@ -60,15 +68,42 @@ static bool render_from_artifact_key(const char *artifact_key) {
 	build_artifact_url(url, sizeof(url), artifact_key);
 	ESP_LOGI(TAG, "display update artifact=%s url=%s", artifact_key, url);
 
-	frame_payload_t payload = {0};
-	if (!frame_fetcher_download(url, &payload)) {
-		ESP_LOGE(TAG, "frame download failed for artifact=%s", artifact_key);
+	if (!display_driver_render_pf7a_url(url)) {
+		ESP_LOGE(TAG, "frame render failed for artifact=%s", artifact_key);
 		return false;
 	}
+	return true;
+}
 
-	bool ok = display_driver_render_pf7a(payload.data, payload.length);
-	frame_fetcher_free(&payload);
-	return ok;
+static void render_task(void *arg) {
+	render_task_arg_t *task_arg = (render_task_arg_t *)arg;
+	if (!render_from_artifact_key(task_arg->artifact_key)) {
+		ESP_LOGE(TAG, "display update failed");
+	}
+	free(task_arg);
+	vTaskDelete(NULL);
+}
+
+static void schedule_render_from_artifact_key(const char *artifact_key) {
+	render_task_arg_t *task_arg = calloc(1, sizeof(*task_arg));
+	if (task_arg == NULL) {
+		ESP_LOGE(TAG, "failed to allocate render task");
+		return;
+	}
+	strncpy(task_arg->artifact_key, artifact_key, sizeof(task_arg->artifact_key) - 1);
+	if (xTaskCreate(render_task, "render_task", 8192, task_arg, 5, NULL) != pdPASS) {
+		ESP_LOGE(TAG, "failed to start render task");
+		free(task_arg);
+	}
+}
+
+static void handle_display_payload(cJSON *display) {
+	cJSON *artifact_key = cJSON_GetObjectItem(display, "artifactKey");
+	if (!cJSON_IsString(artifact_key)) {
+		ESP_LOGW(TAG, "display payload missing artifactKey");
+		return;
+	}
+	schedule_render_from_artifact_key(artifact_key->valuestring);
 }
 
 static void handle_command_payload(cJSON *root) {
@@ -105,16 +140,20 @@ static void ws_message_handler(const char *payload, int payload_len) {
 
 	cJSON *type = cJSON_GetObjectItem(root, "type");
 	if (cJSON_IsString(type) && strcmp(type->valuestring, "display") == 0) {
-		cJSON *artifact_key = cJSON_GetObjectItem(root, "artifactKey");
-		if (cJSON_IsString(artifact_key)) {
-			if (!render_from_artifact_key(artifact_key->valuestring)) {
-				ESP_LOGE(TAG, "display update failed");
-			}
-		}
+		handle_display_payload(root);
 	}
 
 	if (cJSON_IsString(type) && strcmp(type->valuestring, "command") == 0) {
 		handle_command_payload(root);
+	}
+
+	if (cJSON_IsString(type) && strcmp(type->valuestring, "helloAck") == 0) {
+		cJSON *pending = cJSON_GetObjectItem(root, "pending");
+		cJSON *display = cJSON_IsObject(pending) ? cJSON_GetObjectItem(pending, "display") : NULL;
+		if (cJSON_IsObject(display)) {
+			ESP_LOGI(TAG, "rendering pending display from helloAck");
+			handle_display_payload(display);
+		}
 	}
 
 	cJSON_Delete(root);
@@ -135,19 +174,47 @@ static void refresh_task(void *arg) {
 	}
 }
 
+static void render_known_frame_once(void) {
+	const uint8_t *start = _binary_known_frame_800x480_packed_bin_start;
+	const uint8_t *end = _binary_known_frame_800x480_packed_bin_end;
+	size_t len = (size_t)(end - start);
+	ESP_LOGI(TAG, "rendering embedded known frame (%u bytes)", (unsigned)len);
+	if (!display_driver_render_packed_7color(start, len)) {
+		ESP_LOGE(TAG, "embedded known frame render failed");
+		return;
+	}
+	ESP_LOGI(TAG, "embedded known frame render complete");
+}
+
+static void run_boot_render_diagnostics(void) {
+	ESP_LOGW(TAG, "boot render diagnostics: solid black");
+	display_driver_render_solid_test(0);
+	vTaskDelay(pdMS_TO_TICKS(4000));
+
+	ESP_LOGW(TAG, "boot render diagnostics: checkerboard");
+	display_driver_render_checkerboard();
+	vTaskDelay(pdMS_TO_TICKS(4000));
+
+	ESP_LOGW(TAG, "boot render diagnostics: embedded known frame");
+	render_known_frame_once();
+	vTaskDelay(pdMS_TO_TICKS(20000));
+}
+
 void app_main(void) {
 	ESP_LOGI(TAG, "starting picture frame firmware");
 
 	bool display_ready = display_driver_init();
 	if (!display_ready) {
 		ESP_LOGE(TAG, "display init failed, continuing without panel output");
+	} else {
+		run_boot_render_diagnostics();
 	}
 	ESP_ERROR_CHECK(settings_store_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(settings_store_load(&s_settings) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(wifi_manager_init() ? ESP_OK : ESP_FAIL);
-	ESP_ERROR_CHECK(ble_provisioning_start(&s_settings, apply_new_wifi_config) ? ESP_OK : ESP_FAIL);
 
 	if (strlen(s_settings.wifi_ssid) == 0) {
+		ESP_ERROR_CHECK(ble_provisioning_start(&s_settings, apply_new_wifi_config) ? ESP_OK : ESP_FAIL);
 		ESP_LOGW(TAG, "wifi not provisioned yet");
 		return;
 	}

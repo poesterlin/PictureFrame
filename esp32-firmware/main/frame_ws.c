@@ -30,6 +30,14 @@ static void ws_event_handler(
 	}
 
 	if (event_id == WEBSOCKET_EVENT_DATA && s_message_handler != NULL) {
+		if (data->op_code != 1 && data->op_code != 2) {
+			ESP_LOGD(TAG, "websocket control frame op=%d len=%d", data->op_code, data->data_len);
+			return;
+		}
+		if (data->data_len <= 0 || data->data_ptr == NULL) {
+			ESP_LOGD(TAG, "websocket empty data frame op=%d", data->op_code);
+			return;
+		}
 		ESP_LOGI(TAG, "websocket rx len=%d op=%d", data->data_len, data->op_code);
 		s_message_handler((const char *)data->data_ptr, data->data_len);
 		return;

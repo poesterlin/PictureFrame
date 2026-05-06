@@ -5,6 +5,7 @@
 
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_crt_bundle.h"
 
 static const char *TAG = "frame_fetcher";
 
@@ -47,7 +48,8 @@ bool frame_fetcher_download(const char *url, frame_payload_t *out_payload) {
 		.timeout_ms = 15000,
 		.transport_type = HTTP_TRANSPORT_OVER_SSL,
 		.event_handler = http_event_handler,
-		.user_data = &state
+		.user_data = &state,
+		.crt_bundle_attach = esp_crt_bundle_attach
 	};
 
 	esp_http_client_handle_t client = esp_http_client_init(&config);
