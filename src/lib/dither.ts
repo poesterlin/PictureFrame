@@ -19,6 +19,7 @@ export interface DrawingOptions {
 	saturation: number,
 	contrastMode: boolean,
 	context?: context2d;
+	quick?: boolean;
 	clear: boolean;
 }
 
@@ -282,7 +283,7 @@ export function drawNameTag(name: string, context: context2d) {
 }
 
 export async function doStuff(context: context2d, image: canvasImage, imgData: ImageData, options: DrawingOptions) {
-	const { fill, overlayName, brightness, saturation, contrastMode, diff } = options;
+	const { fill, overlayName, brightness, saturation, contrastMode, diff, quick = false } = options;
 
 	if (options.clear) {
 		context.clearRect(0, 0, 800, 480);
@@ -295,7 +296,9 @@ export async function doStuff(context: context2d, image: canvasImage, imgData: I
 	
 	const adjusted = changeBrightness(imgData.data, brightness);
 	changeSaturation(adjusted, saturation == -0.4 ? -1 : saturation);
-	optimizeForScreen(adjusted, 80);
+	if (!quick) {
+		optimizeForScreen(adjusted, 80);
+	}
 	
 	return atkinsonDither(adjusted, palette, 800, 480, contrastMode);
 }

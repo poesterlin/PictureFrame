@@ -58,11 +58,15 @@
 	let processing = false;
 	let diff = { x: 0, y: 0 };
 	let lastPos: { x: number; y: number } | undefined = undefined;
+	let quickPreview = false;
+	let pendingFullPass = false;
+	let adjustingControls = false;
 
 	$: multiple = files && files.length > 1;
 
 	async function ditherImg() {
 		if (processing) {
+			pendingFullPass = pendingFullPass || !quickPreview;
 			return;
 		}
 		processing = true;
@@ -78,6 +82,7 @@
 			fill,
 			diff,
 			saturation,
+			quick: quickPreview,
 			context: isSafari ? context : undefined,
 			clear: true
 		} as DrawingOptions;
@@ -94,6 +99,11 @@
 
 		loading = false;
 		processing = false;
+
+		if (pendingFullPass && !quickPreview) {
+			pendingFullPass = false;
+			void ditherImg();
+		}
 
 		span?.finish();
 		transaction?.finish();
@@ -221,8 +231,34 @@
 	}
 
 	function cancelDrag() {
+		const wasPanning = imagePan;
 		imagePan = false;
 		lastPos = undefined;
+
+		if (wasPanning) {
+			quickPreview = false;
+			void ditherImg();
+		}
+	}
+
+	function startControlAdjust() {
+		adjustingControls = true;
+		quickPreview = true;
+	}
+
+	function startImagePan() {
+		imagePan = true;
+		quickPreview = true;
+	}
+
+	function endControlAdjust() {
+		if (!adjustingControls) {
+			return;
+		}
+
+		adjustingControls = false;
+		quickPreview = false;
+		void ditherImg();
 	}
 
 	function onDropZoneEnter(event: DragEvent) {
@@ -257,7 +293,10 @@
 
 <svelte:body
 	on:pointermove={(e) => dragImage(e)}
-	on:pointerup={cancelDrag}
+	on:pointerup={() => {
+		cancelDrag();
+		endControlAdjust();
+	}}
 	on:dragover|preventDefault
 	on:drop|preventDefault
 />
@@ -311,7 +350,7 @@
 		height="480"
 		class:show={preview}
 		bind:this={canvas}
-		on:pointerdown={() => (imagePan = true)}
+		on:pointerdown={startImagePan}
 	/>
 	<img bind:this={img} alt="hidden" class="hidden" on:load={() => ditherImg()} />
 </div>
@@ -357,6 +396,8 @@
 				max="1.7"
 				step={1 / 25}
 				bind:value={brightness}
+				on:pointerdown={startControlAdjust}
+				on:change={endControlAdjust}
 				on:input={throttledDither}
 			/>
 			<label for="brightness">Helligkeit</label>
@@ -370,6 +411,8 @@
 				max={2.3}
 				step={1 / 25}
 				bind:value={saturation}
+				on:pointerdown={startControlAdjust}
+				on:change={endControlAdjust}
 				on:input={throttledDither}
 			/>
 			<label for="saturation">Sättigung</label>
