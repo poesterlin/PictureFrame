@@ -56,7 +56,7 @@ fi
 if ! git diff --quiet HEAD origin/"$BRANCH"; then
   echo "Remote changes detected, updating..."
   git reset --hard origin/"$BRANCH" || handle_error "Failed to reset to remote."
-  docker compose up -d --build || handle_error "Failed to run docker compose up."
+  docker compose up -d --build --remove-orphans || handle_error "Failed to run docker compose up."
 else
   echo "No remote changes detected, skipping update."
 fi
