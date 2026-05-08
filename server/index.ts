@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { resolveFrameAbsolutePath } from '../realtime/frame-storage.js';
 import {
 	authenticateFrameWsRequest,
@@ -12,7 +13,35 @@ import { manifest } from '../build/server/manifest.js';
 
 const port = Number(process.env.PORT || 3000);
 const channel = getDeviceChannel();
+const staticRoots = [resolve(import.meta.dir, '../build/client'), resolve(import.meta.dir, '../static')];
 let _sql: ReturnType<typeof postgres> | null = null;
+
+async function serveStaticAsset(pathname: string): Promise<Response | null> {
+	if (pathname.includes('\0')) {
+		return null;
+	}
+
+	let decodedPath = pathname;
+	try {
+		decodedPath = decodeURIComponent(pathname);
+	} catch {
+		decodedPath = pathname;
+	}
+
+	for (const root of staticRoots) {
+		const absolutePath = resolve(root, `.${decodedPath}`);
+		if (absolutePath !== root && !absolutePath.startsWith(`${root}/`)) {
+			continue;
+		}
+
+		const asset = Bun.file(absolutePath);
+		if (await asset.exists()) {
+			return new Response(asset, { status: 200 });
+		}
+	}
+
+	return null;
+}
 
 function getSql() {
 	if (!_sql) {
@@ -69,6 +98,13 @@ Bun.serve({
 			}
 
 			return undefined;
+		}
+
+		if (req.method === 'GET') {
+			const staticResponse = await serveStaticAsset(url.pathname);
+			if (staticResponse) {
+				return staticResponse;
+			}
 		}
 
 		if (req.method === 'GET' && url.pathname.startsWith('/frames/')) {
