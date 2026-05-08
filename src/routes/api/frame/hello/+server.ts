@@ -30,7 +30,8 @@ export const POST: RequestHandler = async (event) => {
 
 	// On hello (boot), make sure the frame has something to show. maybeRotate
 	// handles both "no display yet" and "interval elapsed since last rotation".
-	await maybeRotate(auth.frameId);
+	const result = await maybeRotate(auth.frameId);
+	console.log(`[hello] frameId=${auth.frameId} rotationResult=`, result);
 
 	return new Response(JSON.stringify(channel.getSnapshot(auth.frameId)), {
 		headers: { 'content-type': 'application/json' }
