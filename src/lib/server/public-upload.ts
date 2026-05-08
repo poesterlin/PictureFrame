@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 import { pictureFrames, publicUploadLinks } from '$lib/server/db/schema';
 import { generatePairingCode, sha256Hex } from '$lib/server/frame-auth';
 
-const DEFAULT_LINK_TTL_HOURS = 24 * 365 * 10;
+const DEFAULT_LINK_TTL_HOURS = 24 * 365 * 10; // 10 year default TTL
 
 function normalizeCode(value: string) {
 	return value.trim().toUpperCase();
@@ -17,7 +17,7 @@ export function generatePublicUploadCode() {
 export async function createPublicUploadLink(frameId: number) {
 	const ttlHours = DEFAULT_LINK_TTL_HOURS;
 	const now = new Date();
-	const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
+	const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000); 
 	const code = generatePublicUploadCode();
 	const normalizedCode = normalizeCode(code);
 

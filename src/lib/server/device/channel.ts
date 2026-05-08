@@ -1,3 +1,6 @@
+import { db } from '$lib/server/db';
+import { pictureFrames } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 import type { DeviceCommandMessage, DisplayUpdateMessage } from '../../device-contract';
 
 const CHANNEL_KEY = '__pictureframe_device_channel__';
@@ -18,7 +21,6 @@ function isCommandMessage(message: DisplayUpdateMessage | DeviceCommandMessage):
 type FrameChannelState = {
 	cursor: number;
 	latestDisplay: DisplayUpdateMessage | null;
-	lastDisplayedAt: number | null;
 	pendingCommands: FrameChannelEvent[];
 	lastState: unknown;
 	history: FrameChannelEvent[];
@@ -36,7 +38,6 @@ function createState(): FrameChannelState {
 	return {
 		cursor: 0,
 		latestDisplay: null,
-		lastDisplayedAt: null,
 		pendingCommands: [],
 		lastState: null,
 		history: [],
@@ -87,7 +88,7 @@ function createChannel() {
 		publishDisplay(frameId: number, msg: DisplayUpdateMessage): FrameChannelEvent {
 			const state = getOrCreateState(frameId);
 			state.latestDisplay = msg;
-			state.lastDisplayedAt = Date.now();
+			db.update(pictureFrames).set({ lastDisplayedAt: new Date() }).where(eq(pictureFrames.id, frameId)).catch(() => {});
 			return pushEvent(frameId, msg);
 		},
 		publishCommand(frameId: number, msg: DeviceCommandMessage): FrameChannelEvent {
@@ -139,10 +140,6 @@ function createChannel() {
 		getLastState(frameId: number): unknown {
 			const state = getOrCreateState(frameId);
 			return state.lastState;
-		},
-		getLastDisplayedAt(frameId: number): number | null {
-			const state = getOrCreateState(frameId);
-			return state.lastDisplayedAt;
 		},
 		subscribe(frameId: number, handler: (ev: FrameChannelEvent) => void): () => void {
 			const state = getOrCreateState(frameId);

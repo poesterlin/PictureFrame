@@ -43,6 +43,13 @@
       "when": 1778279181473,
       "tag": "0005_lyrical_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778279544268,
+      "tag": "0006_regular_korvac",
+      "breakpoints": true
     }
   ]
 }

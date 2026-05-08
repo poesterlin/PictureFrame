@@ -52,6 +52,7 @@ export const pictureFrames = pgTable('picture_frames', {
 	showFavoritesOnly: boolean('show_favorites_only').notNull().default(false),
 	disabled: boolean('disabled').notNull().default(false),
 	lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }),
+	lastDisplayedAt: timestamp('last_displayed_at', { withTimezone: true, mode: 'date' }),
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
 	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull()
 }, (table) => [
