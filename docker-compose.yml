@@ -4,8 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - PORT=3000
       - FRAMES_DIR=/app/data/frames
+      - DATABASE_URL=${DATABASE_URL}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
     volumes:
       - ./frame_data:/app/data/frames
     labels:
