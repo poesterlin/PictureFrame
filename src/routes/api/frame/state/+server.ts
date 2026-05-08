@@ -1,4 +1,7 @@
 import type { RequestHandler } from './$types';
+import { eq } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { pictureFrames } from '$lib/server/db/schema';
 import { getDeviceChannel } from '$lib/server/device/channel';
 import { maybeRotate } from '$lib/server/device/rotation';
 import { requireFrameAuth } from '../_auth';
@@ -14,6 +17,8 @@ export const POST: RequestHandler = async (event) => {
 		payload,
 		receivedAt: new Date().toISOString()
 	});
+
+	await db.update(pictureFrames).set({ lastSeenAt: new Date() }).where(eq(pictureFrames.id, auth.frameId));
 
 	// Heartbeat is the regular tick the device uses for liveness + event
 	// catch-up. The server (not the device) decides when it's time to rotate

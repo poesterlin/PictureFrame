@@ -29,6 +29,13 @@
       "when": 1778227270102,
       "tag": "0003_deep_fallen_one",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778278666406,
+      "tag": "0004_careless_sinister_six",
+      "breakpoints": true
     }
   ]
 }

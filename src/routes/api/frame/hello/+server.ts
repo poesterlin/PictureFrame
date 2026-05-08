@@ -1,4 +1,7 @@
 import type { RequestHandler } from './$types';
+import { eq } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { pictureFrames } from '$lib/server/db/schema';
 import { getDeviceChannel } from '$lib/server/device/channel';
 import { maybeRotate } from '$lib/server/device/rotation';
 import { requireFrameAuth } from '../_auth';
@@ -22,6 +25,8 @@ export const POST: RequestHandler = async (event) => {
 			receivedAt: new Date().toISOString()
 		});
 	}
+
+	await db.update(pictureFrames).set({ lastSeenAt: new Date() }).where(eq(pictureFrames.id, auth.frameId));
 
 	// On hello (boot), make sure the frame has something to show. maybeRotate
 	// handles both "no display yet" and "interval elapsed since last rotation".

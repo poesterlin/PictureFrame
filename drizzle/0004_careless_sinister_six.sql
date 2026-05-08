@@ -1,0 +1,1 @@
+ALTER TABLE "picture_frames" ADD COLUMN "last_seen_at" timestamp with time zone;
