@@ -12,6 +12,9 @@
 	let message = '';
 	let messageType: 'ok' | 'error' = 'ok';
 	let index = 0;
+	const fallbackImageSrc = `data:image/svg+xml,${encodeURIComponent(
+		`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="Bild nicht gefunden"><rect width="1200" height="800" fill="#f1f5f9"/><rect x="48" y="48" width="1104" height="704" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="6"/><path d="M300 560l150-170 120 130 170-200 170 240H300z" fill="#cbd5e1"/><circle cx="430" cy="300" r="56" fill="#94a3b8"/><text x="600" y="675" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" fill="#334155">Bilddatei nicht gefunden</text></svg>`
+	)}`;
 
 	$: images = keys.map((key) => `/preview/toImg?key=${encodeURIComponent(key)}`);
 	$: pageCount = images.length;
@@ -131,16 +134,35 @@
 			busyAction = '';
 		}
 	}
+
+	function setFallbackImage(event: Event) {
+		const img = event.currentTarget as HTMLImageElement | null;
+		if (!img || img.dataset.fallbackApplied === '1') {
+			return;
+		}
+		img.dataset.fallbackApplied = '1';
+		img.src = fallbackImageSrc;
+	}
+
+	function showPrev() {
+		if (pageCount === 0) return;
+		index = index <= 0 ? pageCount - 1 : index - 1;
+	}
+
+	function showNext() {
+		if (pageCount === 0) return;
+		index = index >= pageCount - 1 ? 0 : index + 1;
+	}
 </script>
 
 {#if browser && images.length > 0}
 	<section class="preview-wrap">
-		<Carousel let:currentPageIndex={index} let:showPrevPage let:showNextPage duration={100}>
+		<Carousel let:currentPageIndex={index} duration={100}>
 			<div slot="prev">
-				<button class="nav" on:click={showPrevPage} aria-label="Vorheriges Bild"> &lt; </button>
+				<button class="nav" on:click={showPrev} aria-label="Vorheriges Bild"> &lt; </button>
 			</div>
 			<div slot="next">
-				<button class="nav" on:click={showNextPage} aria-label="Nächstes Bild"> &gt; </button>
+				<button class="nav" on:click={showNext} aria-label="Nächstes Bild"> &gt; </button>
 			</div>
 			<div slot="dots">
 				<div class="toolbar">
@@ -189,7 +211,7 @@
 				{/if}
 			</div>
 			{#each images as src (src)}
-				<img loading="lazy" {src} alt="" />
+				<img loading="lazy" {src} alt="" on:error={setFallbackImage} />
 			{/each}
 		</Carousel>
 	</section>
