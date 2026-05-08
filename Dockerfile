@@ -25,6 +25,8 @@ ENV FRAMES_DIR=/app/data/frames
 
 COPY --from=build /usr/src/app/build ./build
 COPY --from=build /usr/src/app/static ./static
+COPY --from=build /usr/src/app/src ./src
+COPY --from=build /usr/src/app/drizzle ./drizzle
 COPY --from=build /usr/src/app/server ./server
 COPY --from=build /usr/src/app/realtime ./realtime
 COPY --from=build /usr/src/app/data ./data
