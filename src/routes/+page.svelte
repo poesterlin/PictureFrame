@@ -15,6 +15,10 @@
 						<h2>Admin</h2>
 						<p>Geschenk-Frames vorbereiten und später per Claim-Code übergeben.</p>
 					</a>
+					<a class="card" href="/preview">
+						<h2>Bilder</h2>
+						<p>Bilder manuell anzeigen und verwalten.</p>
+					</a>
 				{:else}
 					<a class="card" href="/preview">
 						<h2>Bilder</h2>

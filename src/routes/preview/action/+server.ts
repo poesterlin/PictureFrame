@@ -1,5 +1,6 @@
 import type { DisplayUpdateMessage } from '$lib/device-contract';
 import { db } from '$lib/server/db';
+import { isAdminUser } from '$lib/server/admin';
 import { pictureFrames, pictures } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { error, json, type RequestHandler } from '@sveltejs/kit';
@@ -8,16 +9,54 @@ import { deleteFrameByKey } from '../../../../realtime/frame-storage.js';
 
 const channel = getDeviceChannel();
 
+function parseFrameId(value: string | null) {
+	if (!value) {
+		return null;
+	}
+
+	const frameId = Number(value);
+	if (!Number.isInteger(frameId) || frameId <= 0) {
+		return null;
+	}
+
+	return frameId;
+}
+
+async function resolveFrameForRequest(user: { id: string; username: string }, frameIdParam: string | null) {
+	const isAdmin = isAdminUser(user);
+	const requestedFrameId = parseFrameId(frameIdParam);
+
+	if (requestedFrameId) {
+		const [requestedFrame] = await db
+			.select({ id: pictureFrames.id })
+			.from(pictureFrames)
+			.where(
+				isAdmin
+					? eq(pictureFrames.id, requestedFrameId)
+					: and(eq(pictureFrames.id, requestedFrameId), eq(pictureFrames.ownerUserId, user.id))
+			)
+			.limit(1);
+
+		if (requestedFrame) {
+			return requestedFrame;
+		}
+	}
+
+	const [fallbackFrame] = await db
+		.select({ id: pictureFrames.id })
+		.from(pictureFrames)
+		.where(isAdmin ? undefined : eq(pictureFrames.ownerUserId, user.id))
+		.limit(1);
+
+	return fallbackFrame ?? null;
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) {
 		error(401, 'Unauthorized');
 	}
 
-	const [frame] = await db
-		.select({ id: pictureFrames.id })
-		.from(pictureFrames)
-		.where(eq(pictureFrames.ownerUserId, locals.user.id))
-		.limit(1);
+	const frame = await resolveFrameForRequest(locals.user, new URL(request.url).searchParams.get('frameId'));
 
 	if (!frame) {
 		error(404, 'Kein Rahmen gefunden');
@@ -29,16 +68,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const key = body.key;
+	const pictureScope = isAdminUser(locals.user)
+		? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
+		: and(eq(pictures.fileName, key), eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, frame.id));
+
 	const [picture] = await db
 		.select({ fileName: pictures.fileName })
 		.from(pictures)
-		.where(
-			and(
-				eq(pictures.fileName, key),
-				eq(pictures.ownerUserId, locals.user.id),
-				eq(pictures.frameId, frame.id)
-			)
-		)
+		.where(pictureScope)
 		.limit(1);
 
 	if (!picture) {
@@ -61,11 +98,7 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		error(401, 'Unauthorized');
 	}
 
-	const [frame] = await db
-		.select({ id: pictureFrames.id })
-		.from(pictureFrames)
-		.where(eq(pictureFrames.ownerUserId, locals.user.id))
-		.limit(1);
+	const frame = await resolveFrameForRequest(locals.user, new URL(request.url).searchParams.get('frameId'));
 
 	if (!frame) {
 		error(404, 'Kein Rahmen gefunden');
@@ -77,15 +110,13 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const key = body.key;
+	const deleteScope = isAdminUser(locals.user)
+		? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
+		: and(eq(pictures.fileName, key), eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, frame.id));
+
 	const deletedRows = await db
 		.delete(pictures)
-		.where(
-			and(
-				eq(pictures.fileName, key),
-				eq(pictures.ownerUserId, locals.user.id),
-				eq(pictures.frameId, frame.id)
-			)
-		)
+		.where(deleteScope)
 		.returning({ id: pictures.id });
 
 	if (deletedRows.length === 0) {

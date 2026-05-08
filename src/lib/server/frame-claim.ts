@@ -2,6 +2,10 @@ import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { frameClaimCodes, pictureFrames } from '$lib/server/db/schema';
 import { generatePairingCode, sha256Hex } from '$lib/server/frame-auth';
+import {
+	CLAIMED_FRAME_REFRESH_SECONDS,
+	UNCLAIMED_FRAME_REFRESH_SECONDS
+} from '$lib/server/frame-defaults';
 
 const DEFAULT_CLAIM_TTL_HOURS = 24 * 14;
 
@@ -182,6 +186,19 @@ export async function claimFrameByCode(rawCode: string, claimantUserId: string):
 			if (transferred.length === 0) {
 				throw new Error('transfer_failed');
 			}
+
+			// Bump the rotation interval from the unclaimed default to the
+			// claimed default, but only if the frame is still at the unclaimed
+			// default (i.e., nobody manually changed it).
+			await tx
+				.update(pictureFrames)
+				.set({ refreshEverySeconds: CLAIMED_FRAME_REFRESH_SECONDS, updatedAt: now })
+				.where(
+					and(
+						eq(pictureFrames.id, current.frameId),
+						eq(pictureFrames.refreshEverySeconds, UNCLAIMED_FRAME_REFRESH_SECONDS)
+					)
+				);
 
 			return {
 				ok: true as const,

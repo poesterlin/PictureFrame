@@ -8,16 +8,22 @@
 
 	let keys = [...(data.keys ?? [])];
 	let flagsByKey: Record<string, Flags> = { ...(data.flagsByKey ?? {}) };
+	let selectedFrameId: number | '' = data.activeFrameId ?? '';
 	let busyAction = '';
 	let message = '';
 	let messageType: 'ok' | 'error' = 'ok';
 	let index = 0;
 	let carousel: { goToPrev?: () => void; goToNext?: () => void } | null = null;
+
+	$: frameQuery = data.activeFrameId ? `&frameId=${encodeURIComponent(String(data.activeFrameId))}` : '';
+	$: previewScopeQuery = data.activeFrameId
+		? `?frameId=${encodeURIComponent(String(data.activeFrameId))}`
+		: '';
 	const fallbackImageSrc = `data:image/svg+xml,${encodeURIComponent(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="Bild nicht gefunden"><rect width="1200" height="800" fill="#f1f5f9"/><rect x="48" y="48" width="1104" height="704" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="6"/><path d="M300 560l150-170 120 130 170-200 170 240H300z" fill="#cbd5e1"/><circle cx="430" cy="300" r="56" fill="#94a3b8"/><text x="600" y="675" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" fill="#334155">Bilddatei nicht gefunden</text></svg>`
 	)}`;
 
-	$: images = keys.map((key) => `/preview/toImg?key=${encodeURIComponent(key)}`);
+	$: images = keys.map((key) => `/preview/toImg?key=${encodeURIComponent(key)}${frameQuery}`);
 	$: pageCount = images.length;
 	$: {
 		if (!Number.isFinite(index)) {
@@ -55,7 +61,7 @@
 			if (!key) {
 				throw new Error('Kein Bild ausgewählt.');
 			}
-			const response = await fetch('/preview/action', {
+			const response = await fetch(`/preview/action${previewScopeQuery}`, {
 				method: 'DELETE',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ key })
@@ -84,7 +90,7 @@
 			if (!key) {
 				throw new Error('Kein Bild ausgewählt.');
 			}
-			const response = await fetch('/preview/action', {
+			const response = await fetch(`/preview/action${previewScopeQuery}`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ key })
@@ -112,7 +118,7 @@
 		const action = patch.favorite !== undefined ? 'favorite' : 'skip';
 		busyAction = action;
 		try {
-			const response = await fetch('/preview/meta', {
+			const response = await fetch(`/preview/meta${previewScopeQuery}`, {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ key, ...patch })
@@ -160,6 +166,17 @@
 
 {#if browser && images.length > 0}
 	<section class="preview-wrap">
+		{#if data.isAdmin && data.frames.length > 0}
+			<form class="frame-picker" method="GET" action="/preview">
+				<label for="frame">Frame</label>
+				<select id="frame" name="frameId" bind:value={selectedFrameId}>
+					{#each data.frames as frame}
+						<option value={frame.id}>{frame.frameName}</option>
+					{/each}
+				</select>
+				<button type="submit">Frame laden</button>
+			</form>
+		{/if}
 		<Carousel bind:this={carousel} duration={100} on:pageChange={handlePageChange}>
 			<div slot="prev">
 				<button class="nav" on:click={showPrev} aria-label="Vorheriges Bild"> &lt; </button>
@@ -219,6 +236,17 @@
 		</Carousel>
 	</section>
 {:else}
+	{#if data.isAdmin && data.frames.length > 0}
+		<form class="frame-picker" method="GET" action="/preview">
+			<label for="frame-empty">Frame</label>
+			<select id="frame-empty" name="frameId" bind:value={selectedFrameId}>
+				{#each data.frames as frame}
+					<option value={frame.id}>{frame.frameName}</option>
+				{/each}
+			</select>
+			<button type="submit">Frame laden</button>
+		</form>
+	{/if}
 	<p class="msg" data-type="error">Keine Bilder zum Anzeigen.</p>
 	<a href="/upload">Bilder hochladen</a>
 {/if}
@@ -240,6 +268,29 @@
 		max-height: 560px;
 		margin: auto;
 		margin-top: 20px;
+	}
+
+	.frame-picker {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		justify-content: center;
+		width: min(600px, 95vw);
+		margin: 0 auto 1rem;
+	}
+
+	.frame-picker label {
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+
+	.frame-picker select {
+		flex: 1;
+		min-width: 0;
+		padding: 0.45rem 0.6rem;
+		border-radius: 8px;
+		border: 1px solid rgba(17, 24, 39, 0.24);
+		font: inherit;
 	}
 
 	button.nav {

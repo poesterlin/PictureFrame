@@ -24,7 +24,6 @@ bool settings_store_init(void) {
 
 static void set_defaults(frame_settings_t *settings) {
 	memset(settings, 0, sizeof(*settings));
-	settings->refresh_every_seconds = 600;
 }
 
 bool settings_store_load(frame_settings_t *settings) {
@@ -55,10 +54,15 @@ bool settings_store_load(frame_settings_t *settings) {
 		ESP_LOGW(TAG, "failed loading frame_auth");
 	}
 
-	uint32_t refresh = settings->refresh_every_seconds;
-	err = nvs_get_u32(handle, "refresh", &refresh);
-	if (err == ESP_OK) {
-		settings->refresh_every_seconds = refresh;
+	// Best-effort: erase the legacy "refresh" key from older firmware. It is
+	// ignored otherwise.
+	{
+		nvs_handle_t rw;
+		if (nvs_open(NAMESPACE, NVS_READWRITE, &rw) == ESP_OK) {
+			nvs_erase_key(rw, "refresh");
+			nvs_commit(rw);
+			nvs_close(rw);
+		}
 	}
 
 	nvs_close(handle);
@@ -76,7 +80,6 @@ bool settings_store_save(const frame_settings_t *settings) {
 	ESP_ERROR_CHECK(nvs_set_str(handle, "wifi_ssid", settings->wifi_ssid));
 	ESP_ERROR_CHECK(nvs_set_str(handle, "wifi_pw", settings->wifi_password));
 	ESP_ERROR_CHECK(nvs_set_str(handle, "frame_auth", settings->frame_auth_key));
-	ESP_ERROR_CHECK(nvs_set_u32(handle, "refresh", settings->refresh_every_seconds));
 	ESP_ERROR_CHECK(nvs_commit(handle));
 	nvs_close(handle);
 	return true;

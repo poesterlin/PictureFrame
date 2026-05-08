@@ -1,26 +1,62 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { isAdminUser } from '$lib/server/admin';
 import { pictureFrames, pictures } from '$lib/server/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 
-
 export const prerender = false;
 
-export const load: PageServerLoad = async ({ locals }) => {
+function parseFrameId(value: string | null) {
+	if (!value) {
+		return null;
+	}
+
+	const frameId = Number(value);
+	if (!Number.isInteger(frameId) || frameId <= 0) {
+		return null;
+	}
+
+	return frameId;
+}
+
+export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) {
 		throw redirect(302, '/login?redirect=%2Fpreview');
 	}
 
-	const [frame] = await db
-		.select({ id: pictureFrames.id })
-		.from(pictureFrames)
-		.where(eq(pictureFrames.ownerUserId, locals.user.id))
-		.limit(1);
+	const isAdmin = isAdminUser(locals.user);
+	const requestedFrameId = parseFrameId(url.searchParams.get('frameId'));
 
-	if (!frame) {
-		redirect(302, '/');
+	const frames = await db
+		.select({
+			id: pictureFrames.id,
+			frameName: pictureFrames.frameName,
+			ownerUserId: pictureFrames.ownerUserId
+		})
+		.from(pictureFrames)
+		.where(isAdmin ? undefined : eq(pictureFrames.ownerUserId, locals.user.id));
+
+	const selectedFrame =
+		(requestedFrameId ? frames.find((frame) => frame.id === requestedFrameId) : null) ?? frames[0] ?? null;
+
+	if (!selectedFrame) {
+		if (!isAdmin) {
+			throw redirect(302, '/');
+		}
+
+		return {
+			isAdmin,
+			frames,
+			activeFrameId: null,
+			keys: [],
+			flagsByKey: {}
+		};
 	}
+
+	const picturesFilter = isAdmin
+		? eq(pictures.frameId, selectedFrame.id)
+		: and(eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, selectedFrame.id));
 
 	const rows = await db
 		.select({
@@ -29,7 +65,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			skipped: pictures.skipped
 		})
 		.from(pictures)
-		.where(and(eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, frame.id)))
+		.where(picturesFilter)
 		.orderBy(desc(pictures.createdAt));
 
 	const keys = rows.map((row) => row.fileName);
@@ -37,5 +73,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		rows.map((row) => [row.fileName, { favorite: row.favorite, skipped: row.skipped }])
 	);
 
-	return { keys, flagsByKey };
+	return {
+		isAdmin,
+		frames,
+		activeFrameId: selectedFrame.id,
+		keys,
+		flagsByKey
+	};
 };

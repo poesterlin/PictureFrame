@@ -2,6 +2,7 @@ import { isAdminUser } from '$lib/server/admin';
 import { db } from '$lib/server/db';
 import { pictureFrames } from '$lib/server/db/schema';
 import { generateFrameToken } from '$lib/server/frame-auth';
+import { UNCLAIMED_FRAME_REFRESH_SECONDS } from '$lib/server/frame-defaults';
 import {
 	createFrameClaimCodeForOwner,
 	deleteDisabledFrameClaimCodeForOwner,
@@ -59,7 +60,7 @@ export const actions: Actions = {
 				frameName,
 				authKey: generateFrameToken(),
 				currentPictureId: null,
-				refreshEverySeconds: 3600,
+				refreshEverySeconds: UNCLAIMED_FRAME_REFRESH_SECONDS,
 				autoRotate: true,
 				showFavoritesOnly: false,
 				disabled: false,

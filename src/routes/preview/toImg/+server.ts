@@ -1,6 +1,10 @@
 import { dev } from '$app/environment';
 import { error, type RequestHandler } from '@sveltejs/kit';
 import { Jimp } from 'jimp';
+import { db } from '$lib/server/db';
+import { isAdminUser } from '$lib/server/admin';
+import { pictureFrames, pictures } from '$lib/server/db/schema';
+import { and, eq } from 'drizzle-orm';
 import {
 	decodeFrameArtifactPayload,
 	ensureFrameArtifactFile,
@@ -46,12 +50,77 @@ function renderImage(payload: Uint8Array, divisions: number) {
     return image;
 }
 
-export const GET: RequestHandler = async ({ url }) => {
+function parseFrameId(value: string | null) {
+	if (!value) {
+		return null;
+	}
+
+	const frameId = Number(value);
+	if (!Number.isInteger(frameId) || frameId <= 0) {
+		return null;
+	}
+
+	return frameId;
+}
+
+async function resolveFrameForRequest(user: { id: string; username: string }, frameIdParam: string | null) {
+	const isAdmin = isAdminUser(user);
+	const requestedFrameId = parseFrameId(frameIdParam);
+
+	if (requestedFrameId) {
+		const [requestedFrame] = await db
+			.select({ id: pictureFrames.id })
+			.from(pictureFrames)
+			.where(
+				isAdmin
+					? eq(pictureFrames.id, requestedFrameId)
+					: and(eq(pictureFrames.id, requestedFrameId), eq(pictureFrames.ownerUserId, user.id))
+			)
+			.limit(1);
+
+		if (requestedFrame) {
+			return requestedFrame;
+		}
+	}
+
+	const [fallbackFrame] = await db
+		.select({ id: pictureFrames.id })
+		.from(pictureFrames)
+		.where(isAdmin ? undefined : eq(pictureFrames.ownerUserId, user.id))
+		.limit(1);
+
+	return fallbackFrame ?? null;
+}
+
+export const GET: RequestHandler = async ({ url, locals }) => {
+	if (!locals.user) {
+		error(401, 'Unauthorized');
+	}
+
 	const key = url.searchParams.get('key');
+	const frame = await resolveFrameForRequest(locals.user, url.searchParams.get('frameId'));
 	const divisions = dev ? 1 : 2;
 
-	if (!key) {
+	if (!key || !frame) {
 		return new Response();
+	}
+
+	const pictureScope = isAdminUser(locals.user)
+		? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
+		: and(
+			eq(pictures.fileName, key),
+			eq(pictures.frameId, frame.id),
+			eq(pictures.ownerUserId, locals.user.id)
+		);
+
+	const [picture] = await db
+		.select({ id: pictures.id })
+		.from(pictures)
+		.where(pictureScope)
+		.limit(1);
+
+	if (!picture) {
+		error(404, 'Bild nicht gefunden');
 	}
 
 	const filePath = resolveFrameAbsolutePath(key);

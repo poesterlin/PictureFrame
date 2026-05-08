@@ -136,15 +136,10 @@ static bool render_from_artifact_key(const char *artifact_key) {
 }
 
 static void handle_command_payload(cJSON *root) {
-	cJSON *refresh_every = cJSON_GetObjectItem(root, "refreshEvery");
 	cJSON *reboot = cJSON_GetObjectItem(root, "reboot");
 	cJSON *refresh_now = cJSON_GetObjectItem(root, "refreshNow");
 	cJSON *sync_now = cJSON_GetObjectItem(root, "syncNow");
 
-	if (cJSON_IsNumber(refresh_every) && refresh_every->valueint > 0) {
-		s_settings.refresh_every_seconds = (uint32_t)refresh_every->valueint;
-		settings_store_save(&s_settings);
-	}
 	if (cJSON_IsTrue(reboot)) {
 		ESP_LOGW(TAG, "reboot command received");
 		vTaskDelay(pdMS_TO_TICKS(250));

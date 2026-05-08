@@ -67,12 +67,6 @@ export const actions: Actions = {
 			.set({ refreshEverySeconds: refreshEvery, updatedAt: new Date() })
 			.where(eq(pictureFrames.id, ownedFrame.id));
 
-		const settings: DeviceCommandMessage = {
-			type: 'command',
-			refreshEvery
-		};
-		channel.publishCommand(ownedFrame.id, settings);
-
 		return { settingsSaved: true };
 	},
 
