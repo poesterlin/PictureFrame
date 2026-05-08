@@ -3,6 +3,7 @@ idf_component_register(
         "app_main.c"
         "wifi_manager.c"
         "frame_ws.c"
+        "frame_api.c"
         "frame_fetcher.c"
         "display_driver.c"
         "settings_store.c"

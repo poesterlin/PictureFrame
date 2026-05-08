@@ -1,49 +1,191 @@
-<div id="frame">
-	<div id="inner">
-		<h1>Fotoframe Uploads</h1>
-		<a href="/upload">Bilder hochladen</a>
-	</div>
-</div>
+<script lang="ts">
+	import type { PageData } from './$types';
 
-<style lang="scss">
-	#frame {
-		background: #89b6c3fa;
+	export let data: PageData;
+</script>
 
-		#inner {
-			text-align: center;
-			width: min(900px, 82vw);
-			background: #f2fcff;
-			border-radius: 10px;
-			margin: 10px auto;
-			color: #e77575;
-			padding: 1rem;
-			box-shadow: 4px 2px 11px rgba(0, 0, 0, 0.184);
-		}
+<section class="home">
+	{#if data.user}
+		<div class="hero owner">
+			<h1>Willkommen, {data.user.username}</h1>
 
-		h1 {
-			font-weight: 200;
-			font-size: 2.3rem;
-		}
+			<div class="grid owner-grid">
+				{#if data.isAdmin}
+					<a class="card" href="/admin">
+						<h2>Admin</h2>
+						<p>Geschenk-Frames vorbereiten und später per Claim-Code übergeben.</p>
+					</a>
+				{/if}
+				<a class="card" href="/preview">
+					<h2>Bilder</h2>
+					<p>Bilder manuell anzeigen und verwalten.</p>
+				</a>
+				<a class="card" href="/settings">
+					<h2>Frame steuern</h2>
+					<p>Intervall, Upload-Links und Wartungsaktionen verwalten.</p>
+				</a>
+				<a class="card" href="/connect">
+					<h2>WLAN verbinden</h2>
+					<p>WLAN Setup für den Frame starten.</p>
+				</a>
+			</div>
 
-		p {
-			width: min(600px, 100%);
-			margin: auto;
-			color: #413a3a;
-		}
+			<div class="auth-row">
+				<a class="button primary" href="/upload">Zum Upload</a>
+				<form method="POST" action="/logout" class="logout-form">
+					<button type="submit" class="button subtle">Logout</button>
+				</form>
+			</div>
+		</div>
+	{:else}
+		<div class="hero party">
+			<p class="eyebrow">Party Upload</p>
+			<h1>Fotos für den Frame teilen</h1>
+			<p class="lead">Als Gast nutzt du nur den Upload mit Code-Link. Owner-Interfaces sind separat und nicht sichtbar.</p>
+			<div class="auth-row">
+				<a class="button primary" href="/upload">Bild hochladen</a>
+				<a class="button subtle" href="/claim">Frame claimen</a>
+				<a class="button subtle" href="/login?redirect=%2F">Owner Login</a>
+			</div>
+		</div>
+	{/if}
+</section>
 
-		a {
-			background: #fa9494;
-			padding: 23px;
-			color: #ffffff;
-			border: 0;
-			font-weight: bold;
-			letter-spacing: 0.4px;
-			border-radius: 30px;
-			margin: 30px;
-			cursor: pointer;
-			text-decoration: none;
-			display: inline-block;
-			margin-bottom: 1em;
-		}
+<style>
+	.home {
+		min-height: 100vh;
+		padding: clamp(1rem, 3vw, 2.5rem);
+		background:
+			radial-gradient(circle at 10% 10%, rgba(250, 117, 117, 0.26), transparent 35%),
+			radial-gradient(circle at 90% 0%, rgba(24, 52, 94, 0.24), transparent 40%),
+			linear-gradient(170deg, #edf7fb 0%, #dbeaf0 60%, #d2e6ef 100%);
 	}
+
+	.hero {
+		max-width: 900px;
+		margin: 0 auto;
+		padding: clamp(1rem, 3vw, 2rem);
+		border-radius: 20px;
+		background: rgba(255, 255, 255, 0.75);
+		border: 1px solid rgba(20, 40, 60, 0.12);
+		box-shadow: 0 30px 65px -45px rgba(14, 28, 40, 0.7);
+		backdrop-filter: blur(5px);
+	}
+
+	.hero.party {
+		max-width: 720px;
+	}
+
+	.hero.owner {
+		max-width: 980px;
+	}
+
+	.eyebrow {
+		margin: 0;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: #44607a;
+	}
+
+	h1 {
+		margin: 0.45rem 0 0;
+		font-size: clamp(1.7rem, 4vw, 3rem);
+		line-height: 1.1;
+		color: #0f2234;
+	}
+
+	.lead {
+		margin: 0.9rem 0 0;
+		max-width: 70ch;
+		font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+		color: #344b60;
+	}
+
+	.auth-row {
+		margin-top: 1.25rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		align-items: center;
+	}
+
+	.logout-form {
+		margin: 0;
+	}
+
+	.logout-form button {
+		margin: 0;
+	}
+
+	.button {
+		font-family: inherit;
+		text-decoration: none;
+		border-radius: 10px;
+		padding: 0.58rem 0.95rem;
+		font-size: 0.88rem;
+		font-weight: 700;
+		line-height: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid transparent;
+		appearance: none;
+		cursor: pointer;
+	}
+
+	.button.primary {
+		background: #0f2234;
+		color: #fff;
+	}
+
+	.button.subtle {
+		background: rgba(255, 255, 255, 0.8);
+		border-color: rgba(15, 34, 52, 0.2);
+		color: #0f2234;
+	}
+
+	.grid {
+		margin: 1.1rem auto 0;
+		max-width: 980px;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.owner-grid {
+		margin-top: 1rem;
+	}
+
+	.card {
+		display: grid;
+		gap: 0.55rem;
+		text-decoration: none;
+		padding: 0.95rem;
+		border-radius: 14px;
+		background: rgba(255, 255, 255, 0.84);
+		border: 1px solid rgba(15, 34, 52, 0.12);
+		color: inherit;
+		transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+	}
+
+	.card:hover {
+		transform: translateY(-2px);
+		border-color: rgba(15, 34, 52, 0.28);
+		box-shadow: 0 12px 24px -16px rgba(0, 0, 0, 0.45);
+	}
+
+	h2 {
+		margin: 0;
+		font-size: 1.03rem;
+		color: #10263a;
+	}
+
+	.card p {
+		margin: 0;
+		font-size: 0.87rem;
+		color: #40566a;
+	}
+
 </style>

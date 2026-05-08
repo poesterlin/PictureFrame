@@ -1,14 +1,34 @@
-import type {
-	DeviceCommandMessage,
-	DisplayUpdateMessage
-} from '$lib/device-contract';
-import type { RequestHandler } from '@sveltejs/kit';
-import { getDeviceBus } from '../../../realtime/device-bus.js';
-import { deleteFrameByKey, pickRandomArtifactKey } from '../../../realtime/frame-storage.js';
+import type { DeviceCommandMessage, DisplayUpdateMessage } from '$lib/device-contract';
+import { db } from '$lib/server/db';
+import { pictureFrames } from '$lib/server/db/schema';
+import { getDeviceChannel } from '$lib/server/device/channel';
+import { pickRandomPictureForFrame } from '$lib/server/device/picker';
+import { eq } from 'drizzle-orm';
+import { error, type RequestHandler } from '@sveltejs/kit';
+import { deleteFrameByKey } from '../../../realtime/frame-storage.js';
 
-const bus = getDeviceBus();
+const channel = getDeviceChannel();
 
-export const POST: RequestHandler = async ({ request }) => {
+async function requireOwnedFrameId(userId: string): Promise<number> {
+	const [frame] = await db
+		.select({ id: pictureFrames.id })
+		.from(pictureFrames)
+		.where(eq(pictureFrames.ownerUserId, userId))
+		.limit(1);
+
+	if (!frame) {
+		error(404, 'No frame linked to your account');
+	}
+
+	return frame.id;
+}
+
+export const POST: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) {
+		error(401, 'Unauthorized');
+	}
+
+	const frameId = await requireOwnedFrameId(locals.user.id);
 	const body = (await request.json()) as Record<string, unknown>;
 
 	if (typeof body.key === 'string' || typeof body.artifactKey === 'string') {
@@ -22,19 +42,20 @@ export const POST: RequestHandler = async ({ request }) => {
 			artifactKey: resolvedArtifactKey,
 			legacyKey: typeof body.key === 'string' ? body.key : undefined
 		};
-		bus.publishDisplay(message);
+		channel.publishDisplay(frameId, message);
 		return new Response(JSON.stringify({ ok: true }));
 	}
 
 	if (typeof body.command === 'string') {
 		if (body.command === 'refreshNow' || body.command === 'syncNow') {
-			const artifactKey = await pickRandomArtifactKey();
+			const picked = await pickRandomPictureForFrame(frameId);
+			const artifactKey = picked?.artifactKey;
 			if (!artifactKey) {
 				return new Response(JSON.stringify({ ok: false, error: 'No local frames available' }), {
 					status: 404
 				});
 			}
-			bus.publishDisplay({
+			channel.publishDisplay(frameId, {
 				type: 'display',
 				requestId: crypto.randomUUID(),
 				createdAt: new Date().toISOString(),
@@ -47,7 +68,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			type: 'command',
 			[body.command]: true
 		} as DeviceCommandMessage;
-		bus.publishCommand(message);
+		channel.publishCommand(frameId, message);
 		return new Response(JSON.stringify({ ok: true }));
 	}
 
@@ -56,7 +77,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	return new Response();
 };
 
-export const DELETE: RequestHandler = async ({ request }) => {
+export const DELETE: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user) {
+		error(401, 'Unauthorized');
+	}
+
 	const body = (await request.json()) as { key?: string };
 	if (!body?.key) {
 		return new Response(JSON.stringify({ ok: false, error: 'Missing key' }), { status: 400 });

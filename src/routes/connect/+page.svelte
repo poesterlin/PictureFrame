@@ -3,10 +3,8 @@
 
 	let ssid = '';
 	let password = '';
-	let logs: string[] = [];
 	let status = 'Bereit';
 	let isProvisioning = false;
-	let isLoadingLogs = false;
 	let connectedDeviceName = '';
 
 	type BleContext = {
@@ -17,7 +15,7 @@
 
 	async function withBleContext() {
 		if (!navigator.bluetooth) {
-			throw new Error('Web Bluetooth wird von diesem Browser nicht unterstuetzt.');
+			throw new Error('Web Bluetooth wird von diesem Browser nicht unterstützt.');
 		}
 
 		status = 'Suche nach Gerät...';
@@ -26,7 +24,7 @@
 		});
 
 		if (!device.gatt?.connect) {
-			throw new Error('GATT Verbindung ist nicht verfuegbar.');
+			throw new Error('GATT Verbindung ist nicht verfügbar.');
 		}
 
 		status = 'Verbinde...';
@@ -81,51 +79,12 @@
 		}
 	}
 
-	async function getLogs() {
-		isLoadingLogs = true;
-		let context: BleContext | undefined;
-
-		try {
-			context = await withBleContext();
-			status = 'Lese Logs...';
-
-			const characteristic = await context.service.getCharacteristic(
-				bleProfile.logReadCharacteristicUuid
-			);
-			const logBuffer = await characteristic.readValue();
-			const decoder = new TextDecoder();
-			logs = decoder
-				.decode(logBuffer)
-				.split('\n')
-				.map((entry) => entry.trim())
-				.filter(Boolean);
-
-			status = `Logs geladen von ${connectedDeviceName}.`;
-		} catch (error) {
-			status = error instanceof Error ? error.message : 'Logs konnten nicht geladen werden.';
-		} finally {
-			disconnect(context);
-			isLoadingLogs = false;
-		}
-	}
-
-	function parseLog(log: string) {
-		const [isoDate, ...message] = log.split(' ');
-
-		const isDateValid = !isNaN(Date.parse(isoDate));
-		if (!isDateValid) {
-			return { time: '', message: log };
-		}
-
-		const date = new Date(isoDate);
-		return { time: date.toLocaleTimeString(), message: message.join(' ') };
-	}
 </script>
 
 <section class="connect-wrap">
 	<form class="connect-card" on:submit={onProvision}>
 		<h1>WLAN via Bluetooth</h1>
-		<p class="subtitle">SSID und Passwort direkt an deinen Frame uebertragen.</p>
+		<p class="subtitle">SSID und Passwort direkt an deinen Frame übertragen.</p>
 
 		<div class="field-row">
 			<label for="ssid">SSID</label>
@@ -137,29 +96,14 @@
 		</div>
 
 		<div class="actions">
-			<button type="submit" disabled={isProvisioning || isLoadingLogs}>
+			<button type="submit" disabled={isProvisioning}>
 				{isProvisioning ? 'Sende...' : 'Über Bluetooth übertragen'}
-			</button>
-			<button type="button" class="secondary" on:click={getLogs} disabled={isLoadingLogs || isProvisioning}>
-				{isLoadingLogs ? 'Lade Logs...' : 'Logs laden'}
 			</button>
 		</div>
 
 		<p class="status">{status}</p>
 	</form>
 </section>
-
-{#if logs.length > 0}
-	<div class="logs">
-		{#each logs as log}
-			{@const parsed = parseLog(log)}
-			<div class="log-entry">
-				{#if parsed.time}<small>{parsed.time}</small>{/if}
-				<span>{parsed.message}</span>
-			</div>
-		{/each}
-	</div>
-{/if}
 
 <style>
 	.connect-wrap {
@@ -229,39 +173,9 @@
 		cursor: pointer;
 	}
 
-	button.secondary {
-		background: #f8fafc;
-		color: #111827;
-		border-color: rgba(17, 24, 39, 0.2);
-	}
-
 	button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
-	}
-
-	.logs {
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-		padding: 0 1rem 2rem;
-		width: min(900px, 100%);
-		margin: 0 auto;
-	}
-
-	.log-entry {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: 0.8rem;
-		padding: 0.55rem 0.7rem;
-		border-radius: 8px;
-		background: rgba(255, 255, 255, 0.78);
-		font-size: 0.84rem;
-		border: 1px solid rgba(17, 24, 39, 0.12);
-	}
-
-	small {
-		color: #4b5563;
 	}
 
 	.status {

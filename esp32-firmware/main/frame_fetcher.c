@@ -1,5 +1,6 @@
 #include "frame_fetcher.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -8,6 +9,16 @@
 #include "esp_crt_bundle.h"
 
 static const char *TAG = "frame_fetcher";
+
+static char s_auth_header[128];
+
+void frame_fetcher_set_auth_key(const char *auth_key) {
+	if (auth_key == NULL || auth_key[0] == '\0') {
+		s_auth_header[0] = '\0';
+		return;
+	}
+	snprintf(s_auth_header, sizeof(s_auth_header), "Bearer %s", auth_key);
+}
 
 typedef struct {
 	uint8_t *buffer;
@@ -55,6 +66,10 @@ bool frame_fetcher_download(const char *url, frame_payload_t *out_payload) {
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 	if (client == NULL) {
 		return false;
+	}
+
+	if (s_auth_header[0] != '\0') {
+		esp_http_client_set_header(client, "Authorization", s_auth_header);
 	}
 
 	esp_err_t err = esp_http_client_perform(client);

@@ -1,6 +1,6 @@
 import { dev } from '$app/environment';
 import { error, type RequestHandler } from '@sveltejs/kit';
-import Jimp from 'jimp';
+import { Jimp } from 'jimp';
 import {
 	decodeFrameArtifactPayload,
 	ensureFrameArtifactFile,
@@ -30,23 +30,20 @@ function expectedPayloadLength() {
 }
 
 function renderImage(payload: Uint8Array, divisions: number) {
-    return new Promise<Jimp>((resolve, reject) => {
-        new Jimp(PANEL_WIDTH / divisions, PANEL_HEIGHT / divisions, (err, image) => {
-            if (err || !image) {
-                reject(error(500, err?.message || 'failed to build preview image'));
-                return;
-            }
-
-            for (let i = 0; i < payload.length; i++) {
-                const x = i % PANEL_WIDTH;
-                const y = Math.floor(i / PANEL_WIDTH);
-                const color = palette[payload[i]] ?? palette[0];
-                image.setPixelColor(color, Math.floor(x / divisions), Math.floor(y / divisions));
-            }
-
-            resolve(image);
-        });
+    const image = new Jimp({
+        width: PANEL_WIDTH / divisions,
+        height: PANEL_HEIGHT / divisions,
+        color: palette[0]
     });
+
+    for (let i = 0; i < payload.length; i++) {
+        const x = i % PANEL_WIDTH;
+        const y = Math.floor(i / PANEL_WIDTH);
+        const color = palette[payload[i]] ?? palette[0];
+        image.setPixelColor(color, Math.floor(x / divisions), Math.floor(y / divisions));
+    }
+
+    return image;
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -59,21 +56,21 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	const filePath = resolveFrameAbsolutePath(key);
 	if (!filePath) {
-		throw error(400, 'invalid key');
+		error(400, 'invalid key');
 	}
 
 	const artifactPayload = await ensureFrameArtifactFile(filePath);
 	if (!artifactPayload) {
-		throw error(400, 'invalid frame artifact file');
+		error(400, 'invalid frame artifact file');
 	}
 
 	const array = decodeFrameArtifactPayload(artifactPayload);
 	if (!array) {
-		throw error(400, 'invalid frame artifact file');
+		error(400, 'invalid frame artifact file');
 	}
 
 	if (array.length !== expectedPayloadLength()) {
-		throw error(400, 'invalid frame payload size');
+		error(400, 'invalid frame payload size');
 	}
 
 	const converted = await renderImage(array, divisions);
@@ -81,7 +78,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	const headers = new Headers();
 	headers.append('content-type', 'image/png');
 	headers.append('Cache-Control', 'public, max-age=604800, immutable');
-	const response = new Response(await converted.getBufferAsync('image/png'), { headers });
+	const pngBuffer = await converted.getBuffer('image/png');
+	const response = new Response(new Uint8Array(pngBuffer), { headers });
 
 	return response;
 };

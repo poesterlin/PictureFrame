@@ -35,14 +35,13 @@ Build instructions and protocol details:
 
 - WebSocket endpoint: `/ws`
 - Server sends `display` and `command` messages
-- Device sends `state`, `log`, and `ack` messages
+- Device sends `hello`, `state`, and `ack` messages
 - Frame artifacts are served from `GET /frames/<owner>/<id>.pf7a`
 
 BLE provisioning profile (for `/connect` page):
 
 - Service UUID: `0000ec00-0000-1000-8000-00805f9b34fb`
 - Wi-Fi write characteristic: `0000ec0e-0000-1000-8000-00805f9b34fb`
-- Log read characteristic: `0000ec0f-0000-1000-8000-00805f9b34fb`
 
 ## No Offline Support
 

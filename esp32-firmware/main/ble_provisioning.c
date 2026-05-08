@@ -20,41 +20,28 @@ static const char *TAG = "ble_provisioning";
 static frame_settings_t *s_settings;
 static ble_wifi_update_handler_t s_handler;
 static uint8_t s_own_addr_type;
-static char s_log_buffer[512] = "ready";
 
 static void start_advertising(void);
 
 typedef enum {
-	CHR_WIFI_PROVISION = 1,
-	CHR_LOG_READ = 2
+	CHR_WIFI_PROVISION = 1
 } ble_char_kind_t;
-
-static void append_log(const char *message) {
-	size_t current = strnlen(s_log_buffer, sizeof(s_log_buffer));
-	size_t remaining = sizeof(s_log_buffer) - current - 1;
-	if (remaining == 0) {
-		return;
-	}
-	int written = snprintf(s_log_buffer + current, remaining + 1, "\n%s", message);
-	if (written < 0) {
-		return;
-	}
-}
 
 static bool ble_provisioning_handle_write(const char *json_payload) {
 	cJSON *root = cJSON_Parse(json_payload);
 	if (root == NULL) {
-		append_log("invalid json payload");
+		ESP_LOGW(TAG, "invalid json payload");
 		return false;
 	}
 
 	cJSON *type = cJSON_GetObjectItem(root, "type");
 	cJSON *ssid = cJSON_GetObjectItem(root, "ssid");
 	cJSON *password = cJSON_GetObjectItem(root, "password");
+	cJSON *auth_key = cJSON_GetObjectItem(root, "authKey");
 
 	if (!cJSON_IsString(type) || strcmp(type->valuestring, "wifiProvision") != 0) {
 		cJSON_Delete(root);
-		append_log("ignored non wifiProvision payload");
+		ESP_LOGW(TAG, "ignored non wifiProvision payload");
 		return false;
 	}
 	if (cJSON_IsString(ssid)) {
@@ -66,11 +53,19 @@ static bool ble_provisioning_handle_write(const char *json_payload) {
 			s_settings->wifi_password, password->valuestring, sizeof(s_settings->wifi_password) - 1);
 		s_settings->wifi_password[sizeof(s_settings->wifi_password) - 1] = '\0';
 	}
+	if (cJSON_IsString(auth_key)) {
+		strncpy(
+			s_settings->frame_auth_key,
+			auth_key->valuestring,
+			sizeof(s_settings->frame_auth_key) - 1
+		);
+		s_settings->frame_auth_key[sizeof(s_settings->frame_auth_key) - 1] = '\0';
+	}
 	if (s_handler != NULL) {
 		s_handler(s_settings);
 	}
 
-	append_log("wifi credentials received over BLE");
+	ESP_LOGI(TAG, "wifi credentials received over BLE");
 	cJSON_Delete(root);
 	return true;
 }
@@ -93,15 +88,11 @@ static int gatt_characteristic_access(
 		}
 		int rc = ble_hs_mbuf_to_flat(ctxt->om, payload, payload_len, NULL);
 		if (rc != 0) {
-			append_log("failed to decode BLE payload");
+			ESP_LOGW(TAG, "failed to decode BLE payload");
 			return BLE_ATT_ERR_UNLIKELY;
 		}
 		payload[payload_len] = '\0';
 		return ble_provisioning_handle_write(payload) ? 0 : BLE_ATT_ERR_UNLIKELY;
-	}
-
-	if (kind == CHR_LOG_READ) {
-		return os_mbuf_append(ctxt->om, s_log_buffer, strnlen(s_log_buffer, sizeof(s_log_buffer)));
 	}
 
 	return BLE_ATT_ERR_UNLIKELY;
@@ -119,12 +110,6 @@ static const struct ble_gatt_svc_def gatt_services[] = {
 					.flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
 					.arg = (void *)(intptr_t)CHR_WIFI_PROVISION
 				},
-				{
-					.uuid = BLE_UUID16_DECLARE(0xec0f),
-					.access_cb = gatt_characteristic_access,
-					.flags = BLE_GATT_CHR_F_READ,
-					.arg = (void *)(intptr_t)CHR_LOG_READ
-				},
 				{0}
 			}
 	},
@@ -134,13 +119,17 @@ static const struct ble_gatt_svc_def gatt_services[] = {
 static int gap_event_handler(struct ble_gap_event *event, void *arg) {
 	(void)arg;
 	if (event->type == BLE_GAP_EVENT_CONNECT) {
-		append_log(event->connect.status == 0 ? "BLE client connected" : "BLE connect failed");
+		if (event->connect.status == 0) {
+			ESP_LOGI(TAG, "BLE client connected");
+		} else {
+			ESP_LOGW(TAG, "BLE connect failed");
+		}
 		if (event->connect.status != 0) {
 			start_advertising();
 		}
 	}
 	if (event->type == BLE_GAP_EVENT_DISCONNECT) {
-		append_log("BLE client disconnected");
+		ESP_LOGI(TAG, "BLE client disconnected");
 		start_advertising();
 	}
 	if (event->type == BLE_GAP_EVENT_ADV_COMPLETE) {

@@ -1,19 +1,55 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+
+	export let data: {
+		frame: { id: number; frameName: string; refreshEverySeconds: number } | null;
+		links: Array<{
+			id: number;
+			frameId: number;
+			uploadCount: number;
+			disabled: boolean;
+			frameName: string;
+		}>;
+	};
+	export let form:
+		| {
+				success?: boolean;
+				settingsSaved?: boolean;
+				uploadUrl?: string;
+				message?: string;
+		  }
+		| undefined;
+
 	const REFRESH_MIN = 30;
 	const REFRESH_MAX = 6 * 60 * 60;
 
 	let settings = {
-		deleteCurrent: false,
-		reboot: false,
-		refreshNow: false,
-		refreshEvery: 10 * 60,
-		clearLog: false,
-		syncNow: false
+		refreshEvery: data.frame?.refreshEverySeconds ?? 10 * 60
 	};
 
-	let isSaving = false;
 	let notice = '';
 	let noticeType: 'success' | 'error' = 'success';
+	let linkNotice = '';
+	let linkNoticeType: 'success' | 'error' = 'success';
+	let newUploadUrl = '';
+
+	$: if (form?.uploadUrl) {
+		newUploadUrl = new URL(form.uploadUrl, window.location.origin).toString();
+		linkNotice = 'Upload-Link erstellt.';
+		linkNoticeType = 'success';
+	}
+
+	$: if (form?.message) {
+		linkNotice = form.message;
+		linkNoticeType = 'error';
+		notice = form.message;
+		noticeType = 'error';
+	}
+
+	$: if (form?.settingsSaved) {
+		notice = 'Einstellungen erfolgreich gespeichert.';
+		noticeType = 'success';
+	}
 
 	function formatInterval(seconds: number) {
 		if (seconds < 60) return `${seconds}s`;
@@ -22,161 +58,112 @@
 		return `${Math.round(seconds / 86400)} d`;
 	}
 
-	function setNotice(message: string, type: 'success' | 'error' = 'success') {
-		notice = message;
-		noticeType = type;
-	}
-
-	function resetOneTimeFlags() {
-		settings.deleteCurrent = false;
-		settings.reboot = false;
-		settings.refreshNow = false;
-		settings.syncNow = false;
-		settings.clearLog = false;
-	}
-
-	async function sendSettings() {
-		if (isSaving) return;
-		isSaving = true;
-		setNotice('');
-
-		try {
-			const form = new FormData();
-			form.append('json', JSON.stringify(settings));
-
-			const response = await fetch('/settings', { method: 'POST', body: form });
-			if (!response.ok) {
-				throw new Error(`Request failed (${response.status})`);
-			}
-
-			setNotice('Einstellungen erfolgreich gespeichert.');
-		} catch (error) {
-			console.error(error);
-			setNotice('Speichern fehlgeschlagen. Bitte erneut versuchen.', 'error');
-		} finally {
-			resetOneTimeFlags();
-			isSaving = false;
-		}
-	}
-
-	async function saveAll(event: SubmitEvent) {
-		event.preventDefault();
-		await sendSettings();
-	}
-
-	async function runAction(
-		changes: Partial<typeof settings>,
-		confirmMessage?: string,
-		successMessage?: string
-	) {
-		if (confirmMessage && !confirm(confirmMessage)) return;
-
-		Object.assign(settings, changes);
-		await sendSettings();
-
-		if (successMessage && noticeType === 'success') {
-			setNotice(successMessage, 'success');
-		}
+	async function copyUploadUrl() {
+		if (!newUploadUrl) return;
+		await navigator.clipboard.writeText(newUploadUrl);
+		linkNotice = 'Link in die Zwischenablage kopiert.';
+		linkNoticeType = 'success';
 	}
 
 	const presets = [
-		{ label: '1 min', value: 60 },
 		{ label: '10 min', value: 600 },
 		{ label: '30 min', value: 1800 },
 		{ label: '1 h', value: 3600 },
 		{ label: '3 h', value: 10800 }
 	];
+
 </script>
 
 <section class="settings-wrap">
-	<form class="settings-card" on:submit={saveAll}>
-		<header>
-			<p class="kicker">Picture Frame</p>
-			<h1>Display Settings</h1>
-			<p class="subtitle">Steuere Update-Intervall, Sync und Wartung in einer Ansicht.</p>
-		</header>
+	<div class="settings-card">
+		<form method="POST" action="?/saveSettings" use:enhance>
+			<header>
+				<h1>Anzeigeeinstellungen</h1>
+			</header>
+
+			<div class="group">
+				<div class="refresh-row">
+					<label for="refresh">Aktualisierungsintervall</label>
+					<strong>{formatInterval(settings.refreshEvery)}</strong>
+				</div>
+				<input
+					type="range"
+					id="refresh"
+					name="refreshEvery"
+					min={REFRESH_MIN}
+					max={REFRESH_MAX}
+					step="30"
+					bind:value={settings.refreshEvery}
+				/>
+				<div class="preset-row">
+					{#each presets as preset}
+						<button
+							type="button"
+							class="preset"
+							on:click={() => (settings.refreshEvery = preset.value)}
+						>{preset.label}</button
+						>
+					{/each}
+				</div>
+				<button class="primary" type="submit">
+					Einstellungen speichern
+				</button>
+			</div>
+
+			{#if notice}
+				<p class="notice" data-type={noticeType}>{notice}</p>
+			{/if}
+		</form>
 
 		<div class="group">
-			<a class="link-tile" href="/connect">WLAN verbinden</a>
-		</div>
+			<h2>Upload-Link</h2>
+			{#if data.frame}
+				<p class="subtitle">
+					Sende diesen Link an Freunde und Familie, damit sie Fotos direkt auf deinen Rahmen hochladen können.
+				</p>
+				<form method="POST" action="?/createUploadLink" class="link-form">
+					<input type="hidden" name="frameId" value={data.frame.id} />
+					<button class="primary" type="submit">Upload-Link erstellen</button>
+				</form>
 
-		<div class="group">
-			<div class="refresh-row">
-				<label for="refresh">Refresh Intervall</label>
-				<strong>{formatInterval(settings.refreshEvery)}</strong>
-			</div>
-			<input
-				type="range"
-				id="refresh"
-				min={REFRESH_MIN}
-				max={REFRESH_MAX}
-				step="30"
-				bind:value={settings.refreshEvery}
-			/>
-			<div class="preset-row">
-				{#each presets as preset}
-					<button
-						type="button"
-						class="preset"
-						on:click={() => (settings.refreshEvery = preset.value)}
-					>{preset.label}</button
-					>
-				{/each}
-			</div>
-			<button class="primary" type="submit" disabled={isSaving}>
-				{isSaving ? 'Speichert...' : 'Einstellungen speichern'}
-			</button>
-		</div>
+				{#if newUploadUrl}
+					<div class="created-link">
+						<code>{newUploadUrl}</code>
+						<button type="button" on:click={copyUploadUrl}>Link kopieren</button>
+					</div>
+				{/if}
 
-		<div class="actions">
-			<button
-				type="button"
-				on:click={() => runAction({ refreshNow: true }, undefined, 'Nächstes Bild angefordert.')}
-				disabled={isSaving}
-			>
-				Nächstes Bild
-			</button>
-			<button
-				type="button"
-				on:click={() => runAction({ syncNow: true }, undefined, 'Sofort-Sync gestartet.')}
-				disabled={isSaving}
-			>
-				Jetzt synchronisieren
-			</button>
-			<button
-				type="button"
-				on:click={() => runAction({ clearLog: true }, 'Logs wirklich löschen?', 'Logs gelöscht.')}
-				disabled={isSaving}
-			>
-				Logs löschen
-			</button>
-			<button
-				type="button"
-				on:click={() =>
-					runAction(
-						{ deleteCurrent: true },
-						'Aktuelles Bild unwiderruflich löschen?',
-						'Aktuelles Bild gelöscht.'
-					)
-				}
-				disabled={isSaving}
-			>
-				Aktuelles Bild löschen
-			</button>
-			<button
-				type="button"
-				class="danger"
-				on:click={() => runAction({ reboot: true }, 'Rahmen jetzt neu starten?', 'Neustart ausgelost.')}
-				disabled={isSaving}
-			>
-				Rahmen neu starten
-			</button>
-		</div>
+				{#if data.links.length > 0}
+					<div class="links-list">
+						{#each data.links as link}
+							<div class="link-row">
+								<div>
+									<p>{link.uploadCount} Hochladungen {#if link.disabled}| deaktiviert{/if}</p>
+								</div>
+								{#if !link.disabled}
+									<form method="POST" action="?/disableUploadLink">
+										<input type="hidden" name="linkId" value={link.id} />
+										<button type="submit" class="danger">Link deaktivieren</button>
+									</form>
+								{:else}
+									<form method="POST" action="?/deleteUploadLink">
+										<input type="hidden" name="linkId" value={link.id} />
+										<button type="submit">Link löschen</button>
+									</form>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			{:else}
+				<p class="subtitle">Kein Rahmen mit deinem Account verknüpft.</p>
+			{/if}
 
-		{#if notice}
-			<p class="notice" data-type={noticeType}>{notice}</p>
-		{/if}
-	</form>
+			{#if linkNotice}
+				<p class="notice" data-type={linkNoticeType}>{linkNotice}</p>
+			{/if}
+		</div>
+	</div>
 </section>
 
 <style>
@@ -211,19 +198,15 @@
 		gap: 0.25rem;
 	}
 
-	.kicker {
-		margin: 0;
-		font-size: 0.73rem;
-		letter-spacing: 0.13em;
-		text-transform: uppercase;
-		color: #657280;
-		font-weight: 700;
-	}
-
 	h1 {
 		margin: 0;
 		font-size: clamp(1.4rem, 4vw, 2.1rem);
 		color: #111827;
+	}
+
+	h2 {
+		margin: 0;
+		font-size: 1rem;
 	}
 
 	.subtitle {
@@ -248,8 +231,7 @@
 	}
 
 	input[type='range']:focus-visible,
-	button:focus-visible,
-	a:focus-visible {
+	button:focus-visible {
 		outline: 3px solid rgba(255, 68, 68, 0.34);
 		outline-offset: 2px;
 	}
@@ -274,15 +256,54 @@
 		accent-color: #e11d48;
 	}
 
-	.preset-row,
-	.actions {
+	.link-form {
+		display: grid;
+		gap: 0.55rem;
+	}
+
+	.created-link {
+		display: grid;
+		gap: 0.45rem;
+		margin-top: 0.35rem;
+	}
+
+	.created-link code {
+		display: block;
+		padding: 0.5rem 0.65rem;
+		border-radius: 8px;
+		background: #eef2ff;
+		font-size: 0.8rem;
+	}
+
+	.links-list {
+		display: grid;
+		gap: 0.55rem;
+	}
+
+	.link-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.6rem;
+		border: 1px solid rgba(17, 24, 39, 0.12);
+		border-radius: 10px;
+		background: rgba(255, 255, 255, 0.75);
+	}
+
+	.link-row p {
+		margin: 0.2rem 0 0;
+		font-size: 0.8rem;
+		color: #4b5563;
+	}
+
+	.preset-row {
 		display: grid;
 		gap: 0.55rem;
 		grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
 	}
 
-	button,
-	.link-tile {
+	button{
 		font: inherit;
 		font-size: 0.9rem;
 		padding: 0.72rem 0.8rem;
@@ -295,8 +316,7 @@
 		transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
 	}
 
-	button:hover,
-	.link-tile:hover {
+	button:hover{
 		transform: translateY(-1px);
 		border-color: rgba(17, 24, 39, 0.38);
 		box-shadow: 0 8px 20px -16px rgba(0, 0, 0, 0.65);
@@ -346,13 +366,17 @@
 	}
 
 	@media (max-width: 520px) {
-		.actions,
 		.preset-row {
 			grid-template-columns: 1fr;
 		}
 
 		.settings-card {
 			padding: 1rem;
+		}
+
+		.link-row {
+			flex-direction: column;
+			align-items: stretch;
 		}
 	}
 </style>

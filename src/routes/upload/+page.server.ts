@@ -1,16 +1,101 @@
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 import sharp from 'sharp';
+import { error, fail } from '@sveltejs/kit';
 import type { color } from '$lib/dither';
 import { frameFormat, type DisplayUpdateMessage } from '$lib/device-contract';
-import { getDeviceBus } from '../../../realtime/device-bus.js';
+import { getDeviceChannel } from '$lib/server/device/channel';
 import { storeFrameArtifacts } from '../../../realtime/frame-storage.js';
+import { consumeUploadLink, getLinkForUploadCode } from '$lib/server/public-upload';
+import { db } from '$lib/server/db';
+import { pictureFrames, pictures } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 
 export const prerender = false;
-const bus = getDeviceBus();
+const channel = getDeviceChannel();
+
+export const load: PageServerLoad = async ({ url, locals }) => {
+	const uploadCode = url.searchParams.get('code')?.trim();
+	const canUploadWithoutCode = Boolean(locals.user);
+
+	if (!canUploadWithoutCode && !uploadCode) {
+		error(404, 'this link has expired or is invalid');
+	}
+
+	if (!canUploadWithoutCode) {
+		const link = await getLinkForUploadCode(uploadCode!);
+		if (!link) {
+			error(403, 'Invalid or expired upload code');
+		}
+	}
+
+	return {
+		uploadCode: uploadCode ?? '',
+		canUploadWithoutCode
+	};
+};
 
 export const actions: Actions = {
-	default: async ({ request }: { request: Request }) => {
+	default: async ({ request, url, locals }) => {
 		const values = await request.formData();
+		const uploadCode = url.searchParams.get('code')?.trim();
+		const user = locals.user;
+
+		let frameBucket = '';
+		let frameId: number | null = null;
+		let ownerUserId = '';
+		let uploadLinkId: number | null = null;
+
+		if (user) {
+			if (uploadCode) {
+				const link = await getLinkForUploadCode(uploadCode);
+				if (link) {
+					if (!link.ownerUserId) {
+						return fail(400, { message: 'Frame owner not found' });
+					}
+					frameBucket = `frame-${link.frameId}`;
+					frameId = link.frameId;
+					ownerUserId = link.ownerUserId;
+					uploadLinkId = link.id;
+				}
+			}
+
+			if (!frameBucket) {
+				const [ownedFrame] = await db
+					.select({ id: pictureFrames.id })
+					.from(pictureFrames)
+					.where(eq(pictureFrames.ownerUserId, user.id))
+					.limit(1);
+
+				if (!ownedFrame) {
+					return fail(400, { message: 'No frame linked to your account' });
+				}
+
+				frameBucket = `frame-${ownedFrame.id}`;
+				frameId = ownedFrame.id;
+				ownerUserId = user.id;
+			}
+		} else {
+			if (!uploadCode) {
+				return fail(400, { message: 'Missing upload code' });
+			}
+
+			const link = await getLinkForUploadCode(uploadCode);
+			if (!link) {
+				return fail(403, { message: 'Invalid or expired upload code' });
+			}
+			if (!link.ownerUserId) {
+				return fail(400, { message: 'Frame owner not found' });
+			}
+
+			frameBucket = `frame-${link.frameId}`;
+			frameId = link.frameId;
+			ownerUserId = link.ownerUserId;
+			uploadLinkId = link.id;
+		}
+
+		if (!ownerUserId || !frameId) {
+			return fail(400, { message: 'Frame owner not found' });
+		}
 
 		const name = values.get('name') as string;
 		console.log('new image from', name);
@@ -18,18 +103,28 @@ export const actions: Actions = {
 		const requestId = (values.get('reqId') as string) || crypto.randomUUID();
 
 		const file = values.get('image') as File;
-		const blob = await file.arrayBuffer();
-		const txt = await dither(Buffer.from(blob));
+		const bytes = await file.bytes();
+		const txt = await dither(bytes);
 		const frame = encodeFrameArtifact(txt, frameFormat.width, frameFormat.height);
 		const normalizedRequestId = requestId.replace('.', '');
 
-		const stored = await storeFrameArtifacts(
-			name,
-			normalizedRequestId,
-			Buffer.from(txt),
-			frame
-		);
+		const stored = await storeFrameArtifacts(frameBucket, normalizedRequestId, Buffer.from(txt), frame);
 		console.log('stored local frame', stored.artifactKey);
+
+		const uploaderName = typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'Gast';
+		await db.insert(pictures).values({
+			frameId,
+			ownerUserId,
+			uploaderName,
+			fileName: stored.artifactKey,
+			favorite: false,
+			skipped: false,
+			createdAt: new Date()
+		});
+
+		if (uploadLinkId) {
+			await consumeUploadLink(uploadLinkId);
+		}
 
 		const updateMessage: DisplayUpdateMessage = {
 			type: 'display',
@@ -38,7 +133,7 @@ export const actions: Actions = {
 			artifactKey: stored.artifactKey
 		};
 
-		bus.publishDisplay(updateMessage);
+		channel.publishDisplay(frameId, updateMessage);
 
 		console.log('pushed update to websocket bus');
 	}

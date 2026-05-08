@@ -1,5 +1,6 @@
 #include "display_driver.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +15,16 @@
 #include "freertos/task.h"
 
 static const char *TAG = "display_driver";
+static char s_auth_header[128];
+
+void display_driver_set_auth_key(const char *auth_key) {
+	if (auth_key == NULL || auth_key[0] == '\0') {
+		s_auth_header[0] = '\0';
+		return;
+	}
+	snprintf(s_auth_header, sizeof(s_auth_header), "Bearer %s", auth_key);
+}
+
 enum { HEADER_SIZE = 8 };
 static const char MAGIC_RAW[] = {'P', 'F', '7', 'A'};
 static const uint16_t PANEL_WIDTH = 800;
@@ -577,6 +588,10 @@ bool display_driver_render_pf7a_url(const char *url) {
 	esp_http_client_handle_t client = esp_http_client_init(&config);
 	if (client == NULL) {
 		return false;
+	}
+
+	if (s_auth_header[0] != '\0') {
+		esp_http_client_set_header(client, "Authorization", s_auth_header);
 	}
 
 	esp_err_t err = esp_http_client_open(client, 0);

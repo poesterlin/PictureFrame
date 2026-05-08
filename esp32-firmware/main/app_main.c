@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 
 #include "ble_provisioning.h"
 #include "display_driver.h"
+#include "frame_api.h"
 #include "frame_fetcher.h"
 #include "frame_ws.h"
 #include "settings_store.h"
@@ -20,13 +22,20 @@ static frame_settings_t s_settings;
 
 static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
+static const char *FRAME_AUTH_KEY_FALLBACK = CONFIG_FRAME_AUTH_KEY;
 static const int WIFI_READY_WAIT_MS = 60000;
-
-static bool render_from_artifact_key(const char *artifact_key);
 
 static volatile bool s_render_in_progress;
 static char s_last_display_request_id[64];
 static char s_last_display_artifact[320];
+static int64_t s_last_cursor;
+
+static bool render_from_artifact_key(const char *artifact_key);
+static void send_hello_request(void);
+static void process_event_envelope(cJSON *envelope);
+static void process_message(cJSON *message);
+static void apply_snapshot_payload(cJSON *snapshot);
+static void poll_events_until_idle(uint32_t wait_ms);
 
 static void display_update_task(void *arg) {
 	char *artifact_key = (char *)arg;
@@ -173,8 +182,147 @@ static void handle_display_payload(cJSON *display_obj) {
 	}
 }
 
+static void process_message(cJSON *message) {
+	if (!cJSON_IsObject(message)) {
+		return;
+	}
+	cJSON *type = cJSON_GetObjectItem(message, "type");
+	if (!cJSON_IsString(type) || type->valuestring == NULL) {
+		return;
+	}
+	if (strcmp(type->valuestring, "display") == 0) {
+		handle_display_payload(message);
+	} else if (strcmp(type->valuestring, "command") == 0) {
+		handle_command_payload(message);
+	}
+}
+
+// Server pushes events as `{ cursor, message }`. Apply the message and
+// advance our cursor; ACK afterwards so server-side pendingCommands shrink.
+static void process_event_envelope(cJSON *envelope) {
+	if (!cJSON_IsObject(envelope)) {
+		return;
+	}
+	cJSON *cursor = cJSON_GetObjectItem(envelope, "cursor");
+	cJSON *message = cJSON_GetObjectItem(envelope, "message");
+	process_message(message);
+	if (cJSON_IsNumber(cursor)) {
+		int64_t value = (int64_t)cursor->valuedouble;
+		if (value > s_last_cursor) {
+			s_last_cursor = value;
+		}
+		frame_api_ack(value);
+	}
+}
+
+// Snapshot shape (per server channel.getSnapshot):
+//   { display: <DisplayUpdateMessage|null>, commands: <DeviceCommandMessage[]>, cursor: <number> }
+static void apply_snapshot_payload(cJSON *snapshot) {
+	if (!cJSON_IsObject(snapshot)) {
+		return;
+	}
+
+	cJSON *display = cJSON_GetObjectItem(snapshot, "display");
+	if (cJSON_IsObject(display)) {
+		handle_display_payload(display);
+	}
+
+	cJSON *commands = cJSON_GetObjectItem(snapshot, "commands");
+	if (cJSON_IsArray(commands)) {
+		cJSON *command = NULL;
+		cJSON_ArrayForEach(command, commands) {
+			if (cJSON_IsObject(command)) {
+				handle_command_payload(command);
+			}
+		}
+	}
+
+	cJSON *cursor = cJSON_GetObjectItem(snapshot, "cursor");
+	if (cJSON_IsNumber(cursor)) {
+		int64_t value = (int64_t)cursor->valuedouble;
+		if (value > s_last_cursor) {
+			s_last_cursor = value;
+		}
+		// Acknowledge so any commands present in the snapshot are cleared.
+		frame_api_ack(value);
+	}
+}
+
+// Performs POST /api/frame/hello, processes returned snapshot.
+static void send_hello_request(void) {
+	cJSON *root = cJSON_CreateObject();
+	if (root == NULL) {
+		ESP_LOGE(TAG, "failed to create hello payload");
+		return;
+	}
+
+	cJSON_AddNumberToObject(root, "protocolVersion", 2);
+	cJSON_AddNumberToObject(root, "refreshEvery", (double)s_settings.refresh_every_seconds);
+
+	char *json = cJSON_PrintUnformatted(root);
+	cJSON_Delete(root);
+	if (json == NULL) {
+		ESP_LOGE(TAG, "failed to serialize hello payload");
+		return;
+	}
+
+	char *response = frame_api_hello(json);
+	free(json);
+	if (response == NULL) {
+		ESP_LOGW(TAG, "hello request failed");
+		return;
+	}
+
+	cJSON *snapshot = cJSON_Parse(response);
+	free(response);
+	if (snapshot == NULL) {
+		ESP_LOGW(TAG, "invalid hello response");
+		return;
+	}
+	apply_snapshot_payload(snapshot);
+	cJSON_Delete(snapshot);
+}
+
+// Drains any pending events the WS may have missed (or any initial events
+// not bundled into the hello snapshot).
+static void poll_events_until_idle(uint32_t wait_ms) {
+	for (int i = 0; i < 4; ++i) {
+		char *response = frame_api_events(s_last_cursor, wait_ms);
+		if (response == NULL) {
+			return;
+		}
+
+		cJSON *root = cJSON_Parse(response);
+		free(response);
+		if (root == NULL) {
+			return;
+		}
+
+		cJSON *events = cJSON_GetObjectItem(root, "events");
+		bool had_any = false;
+		if (cJSON_IsArray(events)) {
+			cJSON *envelope = NULL;
+			cJSON_ArrayForEach(envelope, events) {
+				process_event_envelope(envelope);
+				had_any = true;
+			}
+		}
+		cJSON_Delete(root);
+		if (!had_any) {
+			return;
+		}
+	}
+}
+
+static void ws_connected_handler(void) {
+	// Channel auth happened via Bearer at upgrade time. Nothing to send over
+	// WS (push-only socket). Any state to communicate goes via HTTP.
+	ESP_LOGI(TAG, "ws connected; refreshing snapshot via HTTP");
+	send_hello_request();
+}
+
 static void ws_message_handler(const char *payload, int payload_len) {
-	char json[1024] = {0};
+	char json[2048] = {0};
 	int copy_len = payload_len < (int)sizeof(json) - 1 ? payload_len : (int)sizeof(json) - 1;
 	memcpy(json, payload, copy_len);
 	ESP_LOGI(TAG, "ws payload len=%d body=%s", payload_len, json);
@@ -185,41 +333,37 @@ static void ws_message_handler(const char *payload, int payload_len) {
 		return;
 	}
 
-	cJSON *type = cJSON_GetObjectItem(root, "type");
-	if (cJSON_IsString(type) && strcmp(type->valuestring, "display") == 0) {
-		handle_display_payload(root);
-	}
-
-	if (cJSON_IsString(type) && strcmp(type->valuestring, "command") == 0) {
-		handle_command_payload(root);
-	}
-
-	if (cJSON_IsString(type) && strcmp(type->valuestring, "helloAck") == 0) {
-		cJSON *pending = cJSON_GetObjectItem(root, "pending");
-		if (cJSON_IsObject(pending)) {
-			cJSON *display = cJSON_GetObjectItem(pending, "display");
-			if (cJSON_IsObject(display)) {
-				ESP_LOGI(TAG, "processing pending display from helloAck");
-				handle_display_payload(display);
-			}
-		}
+	// New protocol: server pushes `{ cursor, message }` envelopes.
+	cJSON *cursor = cJSON_GetObjectItem(root, "cursor");
+	cJSON *message = cJSON_GetObjectItem(root, "message");
+	if (cJSON_IsNumber(cursor) && cJSON_IsObject(message)) {
+		process_event_envelope(root);
+	} else {
+		// Legacy unwrapped messages (defensive fallback).
+		process_message(root);
 	}
 
 	cJSON_Delete(root);
 }
 
-static void refresh_task(void *arg) {
+static void heartbeat_task(void *arg) {
 	(void)arg;
 	while (true) {
 		vTaskDelay(pdMS_TO_TICKS(s_settings.refresh_every_seconds * 1000));
-		char state[96];
+		char body[128];
 		snprintf(
-			state,
-			sizeof(state),
-			"{\"type\":\"state\",\"status\":\"heartbeat\",\"refreshEvery\":%u}",
-			(unsigned)s_settings.refresh_every_seconds
+			body,
+			sizeof(body),
+			"{\"status\":\"heartbeat\",\"refreshEvery\":%u,\"cursor\":%" PRId64 "}",
+			(unsigned)s_settings.refresh_every_seconds,
+			s_last_cursor
 		);
-		frame_ws_send(state);
+		if (!frame_api_state(body)) {
+			ESP_LOGW(TAG, "heartbeat post failed");
+		}
+		// Opportunistic catch-up in case WS dropped events while we were
+		// rendering or disconnected.
+		poll_events_until_idle(0);
 	}
 }
 
@@ -232,6 +376,15 @@ void app_main(void) {
 	}
 	ESP_ERROR_CHECK(settings_store_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(settings_store_load(&s_settings) ? ESP_OK : ESP_FAIL);
+	if (s_settings.frame_auth_key[0] == '\0' && FRAME_AUTH_KEY_FALLBACK[0] != '\0') {
+		snprintf(
+			s_settings.frame_auth_key,
+			sizeof(s_settings.frame_auth_key),
+			"%s",
+			FRAME_AUTH_KEY_FALLBACK
+		);
+		settings_store_save(&s_settings);
+	}
 	ESP_ERROR_CHECK(wifi_manager_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(ble_provisioning_start(&s_settings, apply_new_wifi_config) ? ESP_OK : ESP_FAIL);
 
@@ -240,13 +393,28 @@ void app_main(void) {
 		return;
 	}
 
+	if (s_settings.frame_auth_key[0] == '\0') {
+		ESP_LOGE(TAG, "no frame auth key configured; refusing to connect");
+		return;
+	}
+
 	ESP_ERROR_CHECK(wifi_manager_connect(s_settings.wifi_ssid, s_settings.wifi_password) ? ESP_OK : ESP_FAIL);
 	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
 	}
-	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, ws_message_handler) ? ESP_OK : ESP_FAIL);
+
+	// Bearer auth wiring for HTTP + WS clients.
+	frame_api_init(FRAME_BASE_URL, s_settings.frame_auth_key);
+	frame_fetcher_set_auth_key(s_settings.frame_auth_key);
+	display_driver_set_auth_key(s_settings.frame_auth_key);
+
+	// Initial handshake over HTTP. This also produces a display if the frame
+	// has none pending and applies any queued commands.
+	send_hello_request();
+
+	ESP_ERROR_CHECK(frame_ws_init(WS_BASE_URL, s_settings.frame_auth_key, ws_message_handler, ws_connected_handler) ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);
 	ESP_LOGI(TAG, "connected to websocket");
 
-	xTaskCreate(refresh_task, "refresh_task", 4096, NULL, 5, NULL);
+	xTaskCreate(heartbeat_task, "heartbeat_task", 4096, NULL, 5, NULL);
 }

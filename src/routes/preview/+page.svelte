@@ -4,9 +4,29 @@
 	import Carousel from 'svelte-carousel';
 
 	export let data: PageData;
+	type Flags = { favorite: boolean; skipped: boolean };
+
+	let keys = [...(data.keys ?? [])];
+	let flagsByKey: Record<string, Flags> = { ...(data.flagsByKey ?? {}) };
 	let busyAction = '';
 	let message = '';
 	let messageType: 'ok' | 'error' = 'ok';
+	let index = 0;
+
+	$: images = keys.map((key) => `/preview/toImg?key=${encodeURIComponent(key)}`);
+	$: pageCount = images.length;
+	$: {
+		if (!Number.isFinite(index)) {
+			index = 0;
+		}
+		if (pageCount === 0) {
+			index = 0;
+		} else if (index < 0) {
+			index = 0;
+		} else if (index >= pageCount) {
+			index = pageCount - 1;
+		}
+	}
 
 	function setMessage(text: string, type: 'ok' | 'error' = 'ok') {
 		message = text;
@@ -27,8 +47,11 @@
 
 		busyAction = 'delete';
 		try {
-			const key = data.keys![currentPageIndex];
-			const response = await fetch('/command', {
+			const key = keys[currentPageIndex];
+			if (!key) {
+				throw new Error('Kein Bild ausgewählt.');
+			}
+			const response = await fetch('/preview/action', {
 				method: 'DELETE',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ key })
@@ -38,8 +61,10 @@
 				throw new Error('Löschen konnte nicht bestätigt werden.');
 			}
 
-			data.keys!.splice(currentPageIndex, 1);
-			data = data;
+			keys.splice(currentPageIndex, 1);
+			keys = keys;
+			delete flagsByKey[key];
+			flagsByKey = flagsByKey;
 			setMessage('Bild gelöscht.');
 		} catch (error) {
 			setMessage(error instanceof Error ? error.message : 'Löschen fehlgeschlagen.', 'error');
@@ -51,10 +76,14 @@
 	async function showCurrent(currentPageIndex: number) {
 		busyAction = 'show';
 		try {
-			const response = await fetch('/command', {
+			const key = keys[currentPageIndex];
+			if (!key) {
+				throw new Error('Kein Bild ausgewählt.');
+			}
+			const response = await fetch('/preview/action', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ key: data.keys![currentPageIndex] })
+				body: JSON.stringify({ key })
 			});
 			await parseResponse(response);
 			setMessage('Bild an den Rahmen gesendet.');
@@ -65,18 +94,48 @@
 		}
 	}
 
-	$: images = data.keys?.map((key) => `/preview/toImg?key=${encodeURIComponent(key)}`);
+	function getFlags(key: string): Flags {
+		return flagsByKey[key] ?? { favorite: false, skipped: false };
+	}
+
+	async function setFlagsForCurrent(currentPageIndex: number, patch: Partial<Flags>) {
+		const key = keys[currentPageIndex];
+		if (!key) {
+			setMessage('Kein Bild ausgewählt.', 'error');
+			return;
+		}
+
+		const action = patch.favorite !== undefined ? 'favorite' : 'skip';
+		busyAction = action;
+		try {
+			const response = await fetch('/preview/meta', {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ key, ...patch })
+			});
+			const json = await parseResponse(response);
+			flagsByKey[key] = {
+				favorite: json.favorite === true,
+				skipped: json.skipped === true
+			};
+			flagsByKey = flagsByKey;
+
+			if (patch.favorite !== undefined) {
+				setMessage(json.favorite === true ? 'Als Favorit markiert.' : 'Favorit entfernt.');
+			} else {
+				setMessage(json.skipped === true ? 'Als übersprungen markiert.' : 'Überspringen entfernt.');
+			}
+		} catch (error) {
+			setMessage(error instanceof Error ? error.message : 'Aktion fehlgeschlagen.', 'error');
+		} finally {
+			busyAction = '';
+		}
+	}
 </script>
 
-{#if browser && images}
+{#if browser && images.length > 0}
 	<section class="preview-wrap">
-		<Carousel
-			let:currentPageIndex={index}
-			let:pagesCount
-			let:showPrevPage
-			let:showNextPage
-			duration={100}
-		>
+		<Carousel let:currentPageIndex={index} let:showPrevPage let:showNextPage duration={100}>
 			<div slot="prev">
 				<button class="nav" on:click={showPrevPage} aria-label="Vorheriges Bild"> &lt; </button>
 			</div>
@@ -85,7 +144,7 @@
 			</div>
 			<div slot="dots">
 				<div class="toolbar">
-					<pre>{(index + 1).toString().padStart(pagesCount.toString().length, '0')}/{pagesCount}</pre>
+					<pre>{pageCount > 0 ? `${(index + 1).toString().padStart(pageCount.toString().length, '0')}/${pageCount}` : '0/0'}</pre>
 				</div>
 				<form on:submit|preventDefault={() => showCurrent(index)}>
 					<button type="submit" disabled={busyAction !== ''}>
@@ -93,11 +152,36 @@
 					</button>
 					<button
 						type="button"
+						class:active={getFlags(keys[index]).favorite}
+						on:click={() => setFlagsForCurrent(index, { favorite: !getFlags(keys[index]).favorite })}
+						disabled={busyAction !== ''}
+					>
+						{busyAction === 'favorite'
+							? 'Speichere...'
+							: getFlags(keys[index]).favorite
+								? 'Favorit entfernen'
+								: 'Als Favorit markieren'}
+					</button>
+					<button
+						type="button"
+						class="warn"
+						class:active={getFlags(keys[index]).skipped}
+						on:click={() => setFlagsForCurrent(index, { skipped: !getFlags(keys[index]).skipped })}
+						disabled={busyAction !== ''}
+					>
+						{busyAction === 'skip'
+							? 'Speichere...'
+							: getFlags(keys[index]).skipped
+								? 'Überspringen entfernen'
+								: 'Als übersprungen markieren'}
+					</button>
+					<button
+						type="button"
 						class="danger"
 						on:click={() => deleteCurrent(index)}
 						disabled={busyAction !== ''}
 					>
-						{busyAction === 'delete' ? 'Löche...' : 'Löschen'}
+						{busyAction === 'delete' ? 'Lösche...' : 'Löschen'}
 					</button>
 				</form>
 				{#if message}
@@ -109,6 +193,9 @@
 			{/each}
 		</Carousel>
 	</section>
+{:else}
+	<p class="msg" data-type="error">Keine Bilder zum Anzeigen.</p>
+	<a href="/upload">Bilder hochladen</a>
 {/if}
 
 <style>
@@ -150,7 +237,7 @@
 	}
 
 	form > button {
-		flex: 1 1 40%;
+		flex: 1 1 45%;
 	}
 
 	button {
@@ -166,6 +253,18 @@
 	button:disabled {
 		opacity: 0.65;
 		cursor: not-allowed;
+	}
+
+	button.active {
+		background: #ecfdf3;
+		border-color: #86efac;
+		color: #166534;
+	}
+
+	button.warn {
+		background: #fffbeb;
+		border-color: #fcd34d;
+		color: #92400e;
 	}
 
 	.danger {

@@ -49,6 +49,12 @@ bool settings_store_load(frame_settings_t *settings) {
 		ESP_LOGW(TAG, "failed loading wifi_pw");
 	}
 
+	size = sizeof(settings->frame_auth_key);
+	err = nvs_get_str(handle, "frame_auth", settings->frame_auth_key, &size);
+	if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+		ESP_LOGW(TAG, "failed loading frame_auth");
+	}
+
 	uint32_t refresh = settings->refresh_every_seconds;
 	err = nvs_get_u32(handle, "refresh", &refresh);
 	if (err == ESP_OK) {
@@ -69,6 +75,7 @@ bool settings_store_save(const frame_settings_t *settings) {
 
 	ESP_ERROR_CHECK(nvs_set_str(handle, "wifi_ssid", settings->wifi_ssid));
 	ESP_ERROR_CHECK(nvs_set_str(handle, "wifi_pw", settings->wifi_password));
+	ESP_ERROR_CHECK(nvs_set_str(handle, "frame_auth", settings->frame_auth_key));
 	ESP_ERROR_CHECK(nvs_set_u32(handle, "refresh", settings->refresh_every_seconds));
 	ESP_ERROR_CHECK(nvs_commit(handle));
 	nvs_close(handle);

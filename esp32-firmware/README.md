@@ -6,7 +6,7 @@ This firmware replaces the Raspberry Pi `update-service` runtime.
 
 - Target: ESP32-S3 + 7.3" 7-color panel
 - Transport: WebSocket + HTTPS frame download
-- Provisioning: BLE (`ec00` service, `ec0e` write, `ec0f` log read)
+- Provisioning: BLE (`ec00` service, `ec0e` write)
 - Storage: only settings in NVS (Wi-Fi, refresh interval)
 - Offline behavior: no frame history, no download queue, no persistent image cache
 
@@ -80,7 +80,9 @@ idf.py build
 
 - WebSocket endpoint: `wss://<host>/ws`
 - Server sends `display` and `command` messages
-- Device sends `state`, `log`, and `ack` messages
+- Device sends `hello`, `state`, and `ack` messages
+
+Hello payload now includes `authKey` (when configured) so the device can participate in the authenticated websocket flow.
 
 Display update payload:
 

@@ -4,5 +4,4 @@ export interface ISettings {
 	refreshNow: boolean;
 	deleteCurrent: boolean;
 	syncNow: boolean;
-	clearLog: boolean;
 }

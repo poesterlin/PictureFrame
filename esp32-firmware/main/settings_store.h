@@ -6,6 +6,7 @@
 typedef struct {
 	char wifi_ssid[64];
 	char wifi_password[64];
+	char frame_auth_key[64];
 	uint32_t refresh_every_seconds;
 } frame_settings_t;
 

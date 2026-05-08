@@ -8,4 +8,8 @@ config FRAME_ASSET_BASE_URL
     string "Frame asset base URL"
     default "https://frame.oesterlin.dev"
 
+config FRAME_AUTH_KEY
+    string "Default frame auth key"
+    default ""
+
 endmenu

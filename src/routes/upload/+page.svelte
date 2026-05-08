@@ -6,23 +6,16 @@
 	import { getWorkerInstance } from '$lib/util';
 	import { native } from '$lib/no-worker';
 
-	type SentryModule = typeof import('@sentry/browser');
-
 	let input: HTMLInputElement;
 	let img: HTMLImageElement;
 	let canvas: HTMLCanvasElement;
 	let workerInstance: Remote<typeof import('$lib/dithering-worker')>;
 	let context: CanvasRenderingContext2D;
-	let sentry: SentryModule | null = null;
 
 	onMount(() => {
 		context = canvas.getContext('2d', { willReadFrequently: true })!;
 		isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 		isSafari = true;
-
-		void import('@sentry/browser').then((mod) => {
-			sentry = mod;
-		});
 
 		if (!isSafari) {
 			try {
@@ -71,9 +64,6 @@
 		}
 		processing = true;
 
-		const transaction = sentry?.startTransaction({ name: 'upload-transaction' });
-		const span = transaction?.startChild({ op: 'dither' });
-
 		const imgData = context.getImageData(0, 0, 800, 480);
 		const options = {
 			contrastMode,
@@ -104,9 +94,6 @@
 			pendingFullPass = false;
 			void ditherImg();
 		}
-
-		span?.finish();
-		transaction?.finish();
 	}
 
 	const throttledDither = throttle(
@@ -167,8 +154,13 @@
 		form.append('reqId', reqId.toString());
 
 		try {
+			const target = `${window.location.pathname}${window.location.search}`;
+			const response = await fetch(target, { method: 'POST', body: form });
+			if (!response.ok) {
+				throw new Error(`Upload fehlgeschlagen (${response.status})`);
+			}
+
 			await Promise.all([
-				fetch('/upload', { method: 'POST', body: form }),
 				new Promise((res) => setTimeout(res, 1500))
 			]);
 		} catch (error) {
@@ -282,13 +274,12 @@
 </script>
 
 <svelte:head>
-	{#if !preview}
-		<style>
-			body {
-				background: #2e2e2efa !important;
-			}
-		</style>
-	{/if}
+	<style>
+		body {
+			background: #1f2126 !important;
+			color: #f8fafc;
+		}
+	</style>
 </svelte:head>
 
 <svelte:body
@@ -303,6 +294,7 @@
 
 {#if !preview}
 	<div
+		aria-role="button"
 		class="drop-zone"
 		class:active={dropHover}
 		on:dragenter={onDropZoneEnter}
@@ -322,7 +314,6 @@
 		</div>
 
 		<button class="main primary" on:click={() => input.click()}>Bild laden</button>
-		<p class="drop-hint">Oder Bilddateien hierher ziehen</p>
 	</div>
 {/if}
 <input
@@ -485,14 +476,13 @@
 	}
 
 	button.second {
-		color: #fa9494;
 		font-size: 1rem;
-		background: #ffffff47;
-		border: 1.9px solid #fa9494;
+		background: #2b3442;
+		border: 1.9px solid #fca5a5;
 		padding: 19px;
 		border-radius: 65px;
 		flex: 1 1 50%;
-		color: white;
+		color: #f8fafc;
 	}
 
 	canvas.show {
@@ -519,14 +509,14 @@
 		max-width: min(1000px, 85vw);
 	}
 	.controls span {
-		background: #ffffff3b;
+		background: #ffffffd4;
 		padding: 9px;
 		flex: 1 1 100%;
 		max-width: calc(50% - 30px);
 		display: flex;
 		gap: 10px;
 		justify-content: center;
-		color: #4a4a4a;
+		color: #111827;
 		border: 2px dashed #fa9494;
 		align-items: center;
 		font-size: 0.8rem;
@@ -566,7 +556,7 @@
 		background: 0;
 		outline: 0;
 		margin: -55px 0 1rem;
-		color: #ffffff;
+		color: #ffe4e6;
 		border: 0;
 		text-decoration: underline;
 		z-index: 1;

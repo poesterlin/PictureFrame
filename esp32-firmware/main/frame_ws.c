@@ -12,7 +12,9 @@
 static const char *TAG = "frame_ws";
 static esp_websocket_client_handle_t s_client;
 static ws_message_handler_t s_message_handler;
-static char s_ws_url[256];
+static ws_connected_handler_t s_connected_handler;
+static char s_ws_url[320];
+static char s_ws_headers[256];
 
 static void ws_event_handler(
 	void *handler_args,
@@ -26,6 +28,9 @@ static void ws_event_handler(
 	esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
 	if (event_id == WEBSOCKET_EVENT_CONNECTED) {
 		ESP_LOGI(TAG, "websocket connected: %s", s_ws_url);
+		if (s_connected_handler != NULL) {
+			s_connected_handler();
+		}
 		return;
 	}
 
@@ -53,13 +58,43 @@ static void ws_event_handler(
 	}
 }
 
-bool frame_ws_init(const char *base_ws_url, ws_message_handler_t handler) {
+bool frame_ws_init(
+	const char *base_ws_url,
+	const char *auth_key,
+	ws_message_handler_t handler,
+	ws_connected_handler_t connected_handler
+) {
 	s_message_handler = handler;
-	snprintf(s_ws_url, sizeof(s_ws_url), "%s", base_ws_url);
+	s_connected_handler = connected_handler;
+
+	// Bearer auth: prefer Authorization header on the upgrade request; also
+	// append ?token=<auth_key> as a fallback for transports that strip the
+	// header. The server accepts either.
+	if (auth_key != NULL && auth_key[0] != '\0') {
+		const char *separator = (strchr(base_ws_url, '?') != NULL) ? "&" : "?";
+		snprintf(
+			s_ws_url,
+			sizeof(s_ws_url),
+			"%s%stoken=%s",
+			base_ws_url,
+			separator,
+			auth_key
+		);
+		snprintf(
+			s_ws_headers,
+			sizeof(s_ws_headers),
+			"Authorization: Bearer %s\r\n",
+			auth_key
+		);
+	} else {
+		snprintf(s_ws_url, sizeof(s_ws_url), "%s", base_ws_url);
+		s_ws_headers[0] = '\0';
+	}
 
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = s_ws_url,
-		.crt_bundle_attach = esp_crt_bundle_attach
+		.crt_bundle_attach = esp_crt_bundle_attach,
+		.headers = (s_ws_headers[0] != '\0') ? s_ws_headers : NULL
 	};
 	s_client = esp_websocket_client_init(&websocket_cfg);
 	if (s_client == NULL) {
@@ -90,13 +125,4 @@ bool frame_ws_stop(void) {
 	}
 	ESP_LOGI(TAG, "stopping websocket client");
 	return esp_websocket_client_stop(s_client) == ESP_OK;
-}
-
-bool frame_ws_send(const char *json_payload) {
-	if (s_client == NULL || !esp_websocket_client_is_connected(s_client)) {
-		ESP_LOGW(TAG, "websocket send dropped (not connected)");
-		return false;
-	}
-	ESP_LOGI(TAG, "websocket tx len=%u", (unsigned)strlen(json_payload));
-	return esp_websocket_client_send_text(s_client, json_payload, strlen(json_payload), portMAX_DELAY) >= 0;
 }

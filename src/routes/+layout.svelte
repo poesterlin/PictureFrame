@@ -1,21 +1,11 @@
 <script>
-	import { onMount } from 'svelte';
-
-	onMount(async () => {
-		const Sentry = await import('@sentry/browser');
-		Sentry.init({
-			integrations: [new Sentry.BrowserTracing()],
-			tracesSampleRate: 1.0,
-			replaysOnErrorSampleRate: 0.1
-		});
-	});
 </script>
 
 <main>
 	<slot />
 </main>
 
-<style lang="scss">
+<style>
 	:global(body) {
 		@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@200;500;600;700&display=swap');
 		font-family: 'Poppins', sans-serif;
@@ -31,7 +21,8 @@
 	}
 
 	:global(*) {
-		user-select: none;
+		/* user-select: none; */
+		box-sizing: border-box;
 	}
 
 	:global(button) {

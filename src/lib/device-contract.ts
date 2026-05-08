@@ -2,8 +2,7 @@ export const DEVICE_PROTOCOL_VERSION = 1;
 
 export const bleProfile = {
 	serviceUuid: '0000ec00-0000-1000-8000-00805f9b34fb',
-	wifiWriteCharacteristicUuid: '0000ec0e-0000-1000-8000-00805f9b34fb',
-	logReadCharacteristicUuid: '0000ec0f-0000-1000-8000-00805f9b34fb'
+	wifiWriteCharacteristicUuid: '0000ec0e-0000-1000-8000-00805f9b34fb'
 } as const;
 
 export const frameFormat = {
@@ -27,7 +26,6 @@ export interface DeviceCommandMessage {
 	reboot?: boolean;
 	refreshNow?: boolean;
 	syncNow?: boolean;
-	clearLog?: boolean;
 	deleteCurrent?: boolean;
 }
 
