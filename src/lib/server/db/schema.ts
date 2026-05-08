@@ -28,10 +28,6 @@ export type Session = typeof sessionTable.$inferSelect;
 export const pictures = pgTable('pictures', {
 	id: serial('id').primaryKey(),
 	frameId: integer('frame_id').notNull().references((): AnyPgColumn => pictureFrames.id, fullCascade),
-	ownerUserId: text('owner_user_id').references(() => usersTable.id, {
-		onDelete: 'set null',
-		onUpdate: 'cascade'
-	}),
 	uploaderName: text('uploader_name').notNull(),
 	fileName: text('file_name').notNull(),
 	favorite: boolean('favorite').notNull().default(false),

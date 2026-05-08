@@ -3,7 +3,7 @@ import { redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { isAdminUser } from '$lib/server/admin';
 import { pictureFrames, pictures } from '$lib/server/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 
 export const prerender = false;
 
@@ -31,8 +31,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const frames = await db
 		.select({
 			id: pictureFrames.id,
-			frameName: pictureFrames.frameName,
-			ownerUserId: pictureFrames.ownerUserId
+			frameName: pictureFrames.frameName
 		})
 		.from(pictureFrames)
 		.where(isAdmin ? undefined : eq(pictureFrames.ownerUserId, locals.user.id));
@@ -54,9 +53,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		};
 	}
 
-	const picturesFilter = isAdmin
-		? eq(pictures.frameId, selectedFrame.id)
-		: and(eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, selectedFrame.id));
+	const picturesFilter = eq(pictures.frameId, selectedFrame.id);
 
 	const rows = await db
 		.select({

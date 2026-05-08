@@ -45,8 +45,7 @@ export async function getLinkForUploadCode(uploadCode: string) {
 		.select({
 			id: publicUploadLinks.id,
 			frameId: publicUploadLinks.frameId,
-			disabled: publicUploadLinks.disabled,
-			ownerUserId: pictureFrames.ownerUserId
+			disabled: publicUploadLinks.disabled
 		})
 		.from(publicUploadLinks)
 		.innerJoin(pictureFrames, eq(publicUploadLinks.frameId, pictureFrames.id))

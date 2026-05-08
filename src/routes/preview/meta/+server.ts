@@ -61,9 +61,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		.select({ fileName: pictures.fileName, favorite: pictures.favorite, skipped: pictures.skipped })
 		.from(pictures)
 		.where(
-			isAdminUser(locals.user)
-				? eq(pictures.frameId, frame.id)
-				: and(eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, frame.id))
+			eq(pictures.frameId, frame.id)
 		);
 
 	const flagsByKey = Object.fromEntries(
@@ -101,13 +99,7 @@ export const PATCH: RequestHandler = async ({ request, locals, url }) => {
 		.select({ id: pictures.id, favorite: pictures.favorite, skipped: pictures.skipped })
 		.from(pictures)
 		.where(
-			isAdminUser(locals.user)
-				? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
-				: and(
-					eq(pictures.fileName, key),
-					eq(pictures.ownerUserId, locals.user.id),
-					eq(pictures.frameId, frame.id)
-				)
+			and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
 		)
 		.limit(1);
 

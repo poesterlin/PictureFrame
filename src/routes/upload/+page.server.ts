@@ -42,7 +42,6 @@ export const actions: Actions = {
 
 		let frameBucket = '';
 		let frameId: number | null = null;
-		let ownerUserId: string | null = null;
 		let uploadLinkId: number | null = null;
 
 		if (user) {
@@ -51,7 +50,6 @@ export const actions: Actions = {
 				if (link) {
 					frameBucket = `frame-${link.frameId}`;
 					frameId = link.frameId;
-					ownerUserId = link.ownerUserId;
 					uploadLinkId = link.id;
 				}
 			}
@@ -69,7 +67,6 @@ export const actions: Actions = {
 
 				frameBucket = `frame-${ownedFrame.id}`;
 				frameId = ownedFrame.id;
-				ownerUserId = user.id;
 			}
 		} else {
 			if (!uploadCode) {
@@ -83,7 +80,6 @@ export const actions: Actions = {
 
 			frameBucket = `frame-${link.frameId}`;
 			frameId = link.frameId;
-			ownerUserId = link.ownerUserId;
 			uploadLinkId = link.id;
 		}
 
@@ -108,7 +104,6 @@ export const actions: Actions = {
 		const uploaderName = typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'Gast';
 		await db.insert(pictures).values({
 			frameId,
-			ownerUserId,
 			uploaderName,
 			fileName: stored.artifactKey,
 			favorite: false,

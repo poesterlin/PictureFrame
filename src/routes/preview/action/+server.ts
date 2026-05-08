@@ -68,9 +68,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const key = body.key;
-	const pictureScope = isAdminUser(locals.user)
-		? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
-		: and(eq(pictures.fileName, key), eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, frame.id));
+	const pictureScope = and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id));
 
 	const [picture] = await db
 		.select({ fileName: pictures.fileName })
@@ -110,9 +108,7 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const key = body.key;
-	const deleteScope = isAdminUser(locals.user)
-		? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
-		: and(eq(pictures.fileName, key), eq(pictures.ownerUserId, locals.user.id), eq(pictures.frameId, frame.id));
+	const deleteScope = and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id));
 
 	const deletedRows = await db
 		.delete(pictures)

@@ -105,13 +105,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		return new Response();
 	}
 
-	const pictureScope = isAdminUser(locals.user)
-		? and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
-		: and(
-			eq(pictures.fileName, key),
-			eq(pictures.frameId, frame.id),
-			eq(pictures.ownerUserId, locals.user.id)
-		);
+	const pictureScope = and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id));
 
 	const [picture] = await db
 		.select({ id: pictures.id })
