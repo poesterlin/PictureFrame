@@ -5,11 +5,12 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { getWorkerInstance } from '$lib/util';
 	import { native } from '$lib/no-worker';
+	import type { DitheringWorkerApi } from '$lib/dithering-worker';
 
 	let input: HTMLInputElement;
 	let img: HTMLImageElement;
 	let canvas: HTMLCanvasElement;
-	let workerInstance: Remote<typeof import('$lib/dithering-worker')>;
+	let workerInstance: Remote<DitheringWorkerApi>;
 	let context: CanvasRenderingContext2D;
 
 	onMount(() => {
@@ -294,7 +295,7 @@
 
 {#if !preview}
 	<div
-		aria-role="button"
+		role="button"
 		class="drop-zone"
 		class:active={dropHover}
 		on:dragenter={onDropZoneEnter}

@@ -19,8 +19,7 @@ export async function maybeRotate(frameId: number): Promise<RotationOutcome> {
 	const [frame] = await db
 		.select({
 			refreshEverySeconds: pictureFrames.refreshEverySeconds,
-			autoRotate: pictureFrames.autoRotate,
-			lastDisplayedAt: pictureFrames.lastDisplayedAt
+			autoRotate: pictureFrames.autoRotate
 		})
 		.from(pictureFrames)
 		.where(eq(pictureFrames.id, frameId))
@@ -35,11 +34,12 @@ export async function maybeRotate(frameId: number): Promise<RotationOutcome> {
 	}
 
 	const snapshot = channel.getSnapshot(frameId);
+	const lastDisplayedAt = channel.getLastDisplayedAt(frameId);
 	const intervalMs = frame.refreshEverySeconds * 1000;
 
 	// First display ever: rotate immediately so the frame has something to show.
-	if (snapshot.display && frame.lastDisplayedAt !== null) {
-		const elapsed = Date.now() - frame.lastDisplayedAt.getTime();
+	if (snapshot.display && lastDisplayedAt !== null) {
+		const elapsed = Date.now() - lastDisplayedAt;
 		if (elapsed < intervalMs) {
 			return { rotated: false, reason: 'interval-not-elapsed' };
 		}

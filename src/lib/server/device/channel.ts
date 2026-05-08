@@ -1,7 +1,20 @@
-import { db } from '../db';
-import { pictureFrames } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import postgres from 'postgres';
 import type { DeviceCommandMessage, DisplayUpdateMessage } from '../../device-contract';
+
+let _sql: ReturnType<typeof postgres> | null = null;
+
+function getSql() {
+	if (!_sql) {
+		if (!process.env.DATABASE_URL) {
+			return null;
+		}
+		_sql = postgres(process.env.DATABASE_URL, {
+			max: 1,
+			idle_timeout: 5
+		});
+	}
+	return _sql;
+}
 
 const CHANNEL_KEY = '__pictureframe_device_channel__';
 const MAX_HISTORY = 500;
@@ -21,6 +34,7 @@ function isCommandMessage(message: DisplayUpdateMessage | DeviceCommandMessage):
 type FrameChannelState = {
 	cursor: number;
 	latestDisplay: DisplayUpdateMessage | null;
+	lastDisplayedAt: number | null;
 	pendingCommands: FrameChannelEvent[];
 	lastState: unknown;
 	history: FrameChannelEvent[];
@@ -38,6 +52,7 @@ function createState(): FrameChannelState {
 	return {
 		cursor: 0,
 		latestDisplay: null,
+		lastDisplayedAt: null,
 		pendingCommands: [],
 		lastState: null,
 		history: [],
@@ -88,7 +103,11 @@ function createChannel() {
 		publishDisplay(frameId: number, msg: DisplayUpdateMessage): FrameChannelEvent {
 			const state = getOrCreateState(frameId);
 			state.latestDisplay = msg;
-			db.update(pictureFrames).set({ lastDisplayedAt: new Date() }).where(eq(pictureFrames.id, frameId)).catch(() => {});
+			state.lastDisplayedAt = Date.now();
+			const sql = getSql();
+			if (sql) {
+				sql`update picture_frames set last_displayed_at = now() where id = ${frameId}`.catch(() => {});
+			}
 			return pushEvent(frameId, msg);
 		},
 		publishCommand(frameId: number, msg: DeviceCommandMessage): FrameChannelEvent {
@@ -140,6 +159,19 @@ function createChannel() {
 		getLastState(frameId: number): unknown {
 			const state = getOrCreateState(frameId);
 			return state.lastState;
+		},
+		getLastDisplayedAt(frameId: number): number | null {
+			const state = getOrCreateState(frameId);
+			return state.lastDisplayedAt;
+		},
+		async seed(sql: ReturnType<typeof postgres>): Promise<void> {
+			const rows = await sql<{ id: number; lastDisplayedAt: Date | null }[]>`
+				select id, last_displayed_at from picture_frames
+			`;
+			for (const row of rows) {
+				const state = getOrCreateState(row.id);
+				state.lastDisplayedAt = row.lastDisplayedAt?.getTime() ?? null;
+			}
 		},
 		subscribe(frameId: number, handler: (ev: FrameChannelEvent) => void): () => void {
 			const state = getOrCreateState(frameId);

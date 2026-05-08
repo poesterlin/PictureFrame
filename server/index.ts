@@ -59,6 +59,11 @@ function getSql() {
 const ssr = new Server(manifest);
 await ssr.init({ env: process.env as Record<string, string> });
 
+const sql = getSql();
+if (sql) {
+	await channel.seed(sql);
+}
+
 async function resolveFrameArtifactOwner(frameId: number, artifactKey: string): Promise<boolean> {
 	const sql = getSql();
 	if (!sql) {
