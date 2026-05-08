@@ -18,6 +18,7 @@ function isCommandMessage(message: DisplayUpdateMessage | DeviceCommandMessage):
 type FrameChannelState = {
 	cursor: number;
 	latestDisplay: DisplayUpdateMessage | null;
+	lastDisplayedAt: number | null;
 	pendingCommands: FrameChannelEvent[];
 	lastState: unknown;
 	history: FrameChannelEvent[];
@@ -35,6 +36,7 @@ function createState(): FrameChannelState {
 	return {
 		cursor: 0,
 		latestDisplay: null,
+		lastDisplayedAt: null,
 		pendingCommands: [],
 		lastState: null,
 		history: [],
@@ -85,6 +87,7 @@ function createChannel() {
 		publishDisplay(frameId: number, msg: DisplayUpdateMessage): FrameChannelEvent {
 			const state = getOrCreateState(frameId);
 			state.latestDisplay = msg;
+			state.lastDisplayedAt = Date.now();
 			return pushEvent(frameId, msg);
 		},
 		publishCommand(frameId: number, msg: DeviceCommandMessage): FrameChannelEvent {
@@ -136,6 +139,10 @@ function createChannel() {
 		getLastState(frameId: number): unknown {
 			const state = getOrCreateState(frameId);
 			return state.lastState;
+		},
+		getLastDisplayedAt(frameId: number): number | null {
+			const state = getOrCreateState(frameId);
+			return state.lastDisplayedAt;
 		},
 		subscribe(frameId: number, handler: (ev: FrameChannelEvent) => void): () => void {
 			const state = getOrCreateState(frameId);

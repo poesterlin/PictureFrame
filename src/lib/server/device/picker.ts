@@ -10,7 +10,14 @@ type Candidate = {
 	weight: number;
 };
 
-export async function pickRandomPictureForFrame(frameId: number): Promise<{ pictureId: number; artifactKey: string } | null> {
+type PickOptions = {
+	excludeArtifactKey?: string;
+};
+
+export async function pickRandomPictureForFrame(
+	frameId: number,
+	options: PickOptions = {}
+): Promise<{ pictureId: number; artifactKey: string } | null> {
 	const rows = await db
 		.select({
 			pictureId: pictures.id,
@@ -24,11 +31,17 @@ export async function pickRandomPictureForFrame(frameId: number): Promise<{ pict
 		return null;
 	}
 
-	const candidates: Candidate[] = rows.map((row) => ({
+	const allCandidates: Candidate[] = rows.map((row) => ({
 		pictureId: row.pictureId,
 		artifactKey: row.artifactKey,
 		weight: row.favorite ? FAVORITE_WEIGHT : 1
 	}));
+
+	const filteredCandidates = options.excludeArtifactKey
+		? allCandidates.filter((candidate) => candidate.artifactKey !== options.excludeArtifactKey)
+		: allCandidates;
+
+	const candidates = filteredCandidates.length > 0 ? filteredCandidates : allCandidates;
 
 	const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
 	let cursor = Math.random() * totalWeight;

@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { getDeviceChannel } from '$lib/server/device/channel';
-import { pickRandomPictureForFrame } from '$lib/server/device/picker';
+import { maybeRotate } from '$lib/server/device/rotation';
 import { requireFrameAuth } from '../_auth';
 
 const channel = getDeviceChannel();
@@ -23,18 +23,9 @@ export const POST: RequestHandler = async (event) => {
 		});
 	}
 
-	const snapshot = channel.getSnapshot(auth.frameId);
-	if (!snapshot.display) {
-		const picked = await pickRandomPictureForFrame(auth.frameId);
-		if (picked) {
-			channel.publishDisplay(auth.frameId, {
-				type: 'display',
-				requestId: crypto.randomUUID(),
-				createdAt: new Date().toISOString(),
-				artifactKey: picked.artifactKey
-			});
-		}
-	}
+	// On hello (boot), make sure the frame has something to show. maybeRotate
+	// handles both "no display yet" and "interval elapsed since last rotation".
+	await maybeRotate(auth.frameId);
 
 	return new Response(JSON.stringify(channel.getSnapshot(auth.frameId)), {
 		headers: { 'content-type': 'application/json' }

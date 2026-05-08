@@ -24,6 +24,8 @@ static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
 static const char *FRAME_AUTH_KEY_FALLBACK = CONFIG_FRAME_AUTH_KEY;
 static const int WIFI_READY_WAIT_MS = 60000;
+// Heartbeat cadence is fixed; image rotation cadence is decided server-side.
+static const uint32_t HEARTBEAT_INTERVAL_SECONDS = 60;
 
 static volatile bool s_render_in_progress;
 static char s_last_display_request_id[64];
@@ -257,7 +259,7 @@ static void send_hello_request(void) {
 	}
 
 	cJSON_AddNumberToObject(root, "protocolVersion", 2);
-	cJSON_AddNumberToObject(root, "refreshEvery", (double)s_settings.refresh_every_seconds);
+	cJSON_AddNumberToObject(root, "heartbeatEvery", (double)HEARTBEAT_INTERVAL_SECONDS);
 
 	char *json = cJSON_PrintUnformatted(root);
 	cJSON_Delete(root);
@@ -350,7 +352,7 @@ static void ws_message_handler(const char *payload, int payload_len) {
 static void heartbeat_task(void *arg) {
 	(void)arg;
 	while (true) {
-		vTaskDelay(pdMS_TO_TICKS(s_settings.refresh_every_seconds * 1000));
+		vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_SECONDS * 1000));
 
 		if (s_render_in_progress) {
 			// Render path already owns WS-stop/start; skip this tick.
@@ -367,8 +369,8 @@ static void heartbeat_task(void *arg) {
 		snprintf(
 			body,
 			sizeof(body),
-			"{\"status\":\"heartbeat\",\"refreshEvery\":%u,\"cursor\":%" PRId64 "}",
-			(unsigned)s_settings.refresh_every_seconds,
+			"{\"status\":\"heartbeat\",\"heartbeatEvery\":%u,\"cursor\":%" PRId64 "}",
+			(unsigned)HEARTBEAT_INTERVAL_SECONDS,
 			s_last_cursor
 		);
 		if (!frame_api_state(body)) {
