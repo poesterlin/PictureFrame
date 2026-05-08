@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.limit(1);
 
 	if (!frame) {
-		return { keys: [], flagsByKey: {} };
+		redirect(302, '/');
 	}
 
 	const rows = await db
