@@ -12,6 +12,7 @@
 	let message = '';
 	let messageType: 'ok' | 'error' = 'ok';
 	let index = 0;
+	let carousel: { goToPrev?: () => void; goToNext?: () => void } | null = null;
 	const fallbackImageSrc = `data:image/svg+xml,${encodeURIComponent(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="Bild nicht gefunden"><rect width="1200" height="800" fill="#f1f5f9"/><rect x="48" y="48" width="1104" height="704" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="6"/><path d="M300 560l150-170 120 130 170-200 170 240H300z" fill="#cbd5e1"/><circle cx="430" cy="300" r="56" fill="#94a3b8"/><text x="600" y="675" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" fill="#334155">Bilddatei nicht gefunden</text></svg>`
 	)}`;
@@ -145,19 +146,21 @@
 	}
 
 	function showPrev() {
-		if (pageCount === 0) return;
-		index = index <= 0 ? pageCount - 1 : index - 1;
+		carousel?.goToPrev?.();
 	}
 
 	function showNext() {
-		if (pageCount === 0) return;
-		index = index >= pageCount - 1 ? 0 : index + 1;
+		carousel?.goToNext?.();
+	}
+
+	function handlePageChange(event: CustomEvent<number>) {
+		index = event.detail;
 	}
 </script>
 
 {#if browser && images.length > 0}
 	<section class="preview-wrap">
-		<Carousel let:currentPageIndex={index} duration={100}>
+		<Carousel bind:this={carousel} duration={100} on:pageChange={handlePageChange}>
 			<div slot="prev">
 				<button class="nav" on:click={showPrev} aria-label="Vorheriges Bild"> &lt; </button>
 			</div>
