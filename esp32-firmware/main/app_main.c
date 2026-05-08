@@ -315,10 +315,11 @@ static void poll_events_until_idle(uint32_t wait_ms) {
 }
 
 static void ws_connected_handler(void) {
-	// Channel auth happened via Bearer at upgrade time. Nothing to send over
-	// WS (push-only socket). Any state to communicate goes via HTTP.
-	ESP_LOGI(TAG, "ws connected; refreshing snapshot via HTTP");
-	send_hello_request();
+	// Push-only socket. The initial HTTP `hello` already ran before WS started,
+	// so any current display/commands are applied. Live events arrive via WS.
+	// Catch-up of missed events happens from the heartbeat task, which can
+	// safely pause the WS to free TLS heap for the HTTP catch-up call.
+	ESP_LOGI(TAG, "ws connected (push-only)");
 }
 
 static void ws_message_handler(const char *payload, int payload_len) {
@@ -350,6 +351,18 @@ static void heartbeat_task(void *arg) {
 	(void)arg;
 	while (true) {
 		vTaskDelay(pdMS_TO_TICKS(s_settings.refresh_every_seconds * 1000));
+
+		if (s_render_in_progress) {
+			// Render path already owns WS-stop/start; skip this tick.
+			continue;
+		}
+
+		// Pause the WS so the TLS handshake for our HTTPS calls has enough
+		// heap. The mbedtls fragment buffers are also tuned down via sdkconfig
+		// to make this less critical, but the belt-and-suspenders approach
+		// keeps things robust on the ESP32-C6.
+		frame_ws_stop();
+
 		char body[128];
 		snprintf(
 			body,
@@ -361,9 +374,11 @@ static void heartbeat_task(void *arg) {
 		if (!frame_api_state(body)) {
 			ESP_LOGW(TAG, "heartbeat post failed");
 		}
-		// Opportunistic catch-up in case WS dropped events while we were
-		// rendering or disconnected.
+		// Catch up on any events that arrived (or were missed) while the WS
+		// was disconnected.
 		poll_events_until_idle(0);
+
+		frame_ws_start();
 	}
 }
 

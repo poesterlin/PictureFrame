@@ -4,3 +4,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
+
+# Heartbeat task pauses the WebSocket while it makes HTTPS calls, so the
+# default mbedtls fragment buffers are fine. We keep this comment as a
+# reminder: do not enable CONFIG_MBEDTLS_DYNAMIC_BUFFER here — it conflicts
+# with the streaming artifact reader which expects a 16 KB record buffer.
+
