@@ -1,5 +1,5 @@
-import { db } from '$lib/server/db';
-import { pictureFrames } from '$lib/server/db/schema';
+import { db } from '../db';
+import { pictureFrames } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import type { DeviceCommandMessage, DisplayUpdateMessage } from '../../device-contract';
 
