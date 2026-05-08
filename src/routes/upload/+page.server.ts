@@ -42,16 +42,13 @@ export const actions: Actions = {
 
 		let frameBucket = '';
 		let frameId: number | null = null;
-		let ownerUserId = '';
+		let ownerUserId: string | null = null;
 		let uploadLinkId: number | null = null;
 
 		if (user) {
 			if (uploadCode) {
 				const link = await getLinkForUploadCode(uploadCode);
 				if (link) {
-					if (!link.ownerUserId) {
-						return fail(400, { message: 'Frame owner not found' });
-					}
 					frameBucket = `frame-${link.frameId}`;
 					frameId = link.frameId;
 					ownerUserId = link.ownerUserId;
@@ -83,9 +80,6 @@ export const actions: Actions = {
 			if (!link) {
 				return fail(403, { message: 'Invalid or expired upload code' });
 			}
-			if (!link.ownerUserId) {
-				return fail(400, { message: 'Frame owner not found' });
-			}
 
 			frameBucket = `frame-${link.frameId}`;
 			frameId = link.frameId;
@@ -93,8 +87,8 @@ export const actions: Actions = {
 			uploadLinkId = link.id;
 		}
 
-		if (!ownerUserId || !frameId) {
-			return fail(400, { message: 'Frame owner not found' });
+		if (!frameId) {
+			return fail(400, { message: 'Frame not found' });
 		}
 
 		const name = values.get('name') as string;

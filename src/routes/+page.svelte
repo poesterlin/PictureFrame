@@ -15,37 +15,36 @@
 						<h2>Admin</h2>
 						<p>Geschenk-Frames vorbereiten und später per Claim-Code übergeben.</p>
 					</a>
+				{:else}
+					<a class="card" href="/preview">
+						<h2>Bilder</h2>
+						<p>Bilder manuell anzeigen und verwalten.</p>
+					</a>
+					<a class="card" href="/settings">
+						<h2>Frame steuern</h2>
+						<p>Intervall, Upload-Links und Wartungsaktionen verwalten.</p>
+					</a>
 				{/if}
-				<a class="card" href="/preview">
-					<h2>Bilder</h2>
-					<p>Bilder manuell anzeigen und verwalten.</p>
-				</a>
-				<a class="card" href="/settings">
-					<h2>Frame steuern</h2>
-					<p>Intervall, Upload-Links und Wartungsaktionen verwalten.</p>
-				</a>
 				<a class="card" href="/connect">
 					<h2>WLAN verbinden</h2>
 					<p>WLAN Setup für den Frame starten.</p>
 				</a>
 			</div>
-
 			<div class="auth-row">
-				<a class="button primary" href="/upload">Zum Upload</a>
-				<form method="POST" action="/logout" class="logout-form">
-					<button type="submit" class="button subtle">Logout</button>
-				</form>
+				{#if !data.isAdmin}
+					<a class="button primary" href="/upload">Zum Upload</a>
+				{/if}
+				<a class="button subtle" href="/profile">Profil</a>
 			</div>
 		</div>
 	{:else}
 		<div class="hero party">
-			<p class="eyebrow">Party Upload</p>
-			<h1>Fotos für den Frame teilen</h1>
-			<p class="lead">Als Gast nutzt du nur den Upload mit Code-Link. Owner-Interfaces sind separat und nicht sichtbar.</p>
+			<h1>Dein Frame</h1>
+			<p class="lead">
+				Um deinen Frame einzurichten, benötigst du einen Invite-Code. Mit deinem Frame hast du einen Code erhalten der dich zur Registrierung berechtigt.
+			</p>
 			<div class="auth-row">
-				<a class="button primary" href="/upload">Bild hochladen</a>
-				<a class="button subtle" href="/claim">Frame claimen</a>
-				<a class="button subtle" href="/login?redirect=%2F">Owner Login</a>
+				<a class="button subtle" href="/login?redirect=%2F">Login</a>
 			</div>
 		</div>
 	{/if}
@@ -80,15 +79,6 @@
 		max-width: 980px;
 	}
 
-	.eyebrow {
-		margin: 0;
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-		color: #44607a;
-	}
-
 	h1 {
 		margin: 0.45rem 0 0;
 		font-size: clamp(1.7rem, 4vw, 3rem);
@@ -109,14 +99,6 @@
 		flex-wrap: wrap;
 		gap: 0.6rem;
 		align-items: center;
-	}
-
-	.logout-form {
-		margin: 0;
-	}
-
-	.logout-form button {
-		margin: 0;
 	}
 
 	.button {
@@ -167,7 +149,10 @@
 		background: rgba(255, 255, 255, 0.84);
 		border: 1px solid rgba(15, 34, 52, 0.12);
 		color: inherit;
-		transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+		transition:
+			transform 120ms ease,
+			box-shadow 120ms ease,
+			border-color 120ms ease;
 	}
 
 	.card:hover {
@@ -187,5 +172,4 @@
 		font-size: 0.87rem;
 		color: #40566a;
 	}
-
 </style>

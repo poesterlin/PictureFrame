@@ -2,9 +2,12 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
- 	import type { ActionData } from './$types';
+  	import type { ActionData } from './$types';
 
+	export let data: { inviteCode: string };
 	export let form: ActionData;
+
+	$: hasInviteCodeInUrl = data.inviteCode.length > 0;
 </script>
 
 <div class="background">
@@ -13,16 +16,20 @@
 			<h2>Register</h2>
 
 			<form method="POST" action="?/register" use:enhance>
-				<div>
-					<label for="inviteCode">Invite code</label>
-					<input
-						type="text"
-						id="inviteCode"
-						name="inviteCode"
-						placeholder="ABCD-EFGH-JKLM"
-						required
-					/>
-				</div>
+				{#if hasInviteCodeInUrl}
+					<input type="hidden" name="inviteCode" value={data.inviteCode} />
+				{:else}
+					<div>
+						<label for="inviteCode">Invite code</label>
+						<input
+							type="text"
+							id="inviteCode"
+							name="inviteCode"
+							placeholder="ABCD-EFGH-JKLM"
+							required
+						/>
+					</div>
+				{/if}
 
 				<div>
 					<label for="username">Username</label>

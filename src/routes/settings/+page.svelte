@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
 
 	export let data: {
 		frame: { id: number; frameName: string; refreshEverySeconds: number } | null;
@@ -34,7 +35,7 @@
 	let newUploadUrl = '';
 
 	$: if (form?.uploadUrl) {
-		newUploadUrl = new URL(form.uploadUrl, window.location.origin).toString();
+		newUploadUrl = new URL(form.uploadUrl, $page.url.origin).toString();
 		linkNotice = 'Upload-Link erstellt.';
 		linkNoticeType = 'success';
 	}
@@ -121,7 +122,7 @@
 				<p class="subtitle">
 					Sende diesen Link an Freunde und Familie, damit sie Fotos direkt auf deinen Rahmen hochladen können.
 				</p>
-				<form method="POST" action="?/createUploadLink" class="link-form">
+				<form method="POST" action="?/createUploadLink" class="link-form" use:enhance>
 					<input type="hidden" name="frameId" value={data.frame.id} />
 					<button class="primary" type="submit">Upload-Link erstellen</button>
 				</form>

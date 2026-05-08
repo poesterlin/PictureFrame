@@ -15,13 +15,15 @@ export const load: PageServerLoad = async (event) => {
 		return redirect(302, '/');
 	}
 
-	return {};
+	return {
+		inviteCode: event.url.searchParams.get('inviteCode')?.trim() ?? ''
+	};
 };
 
 export const actions: Actions = {
 	register: validateForm(
 		z.object({
-			inviteCode: z.string(),
+			inviteCode: z.string().optional(),
 			username: z.string(),
 			password: z.string(),
 			email: z.string().optional(),
@@ -29,7 +31,8 @@ export const actions: Actions = {
 		}),
 		async (event, form) => {
 			const { username, password } = form;
-			const inviteCode = form.inviteCode.trim();
+			const inviteCode =
+				form.inviteCode?.trim() ?? event.url.searchParams.get('inviteCode')?.trim() ?? '';
 
 			if (!inviteCode) {
 				return fail(400, {

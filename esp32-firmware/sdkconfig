@@ -1034,6 +1034,8 @@ CONFIG_PARTITION_TABLE_MD5=y
 CONFIG_FRAME_WS_BASE_URL="wss://frame.oesterlin.dev/ws"
 # default:
 CONFIG_FRAME_ASSET_BASE_URL="https://frame.oesterlin.dev"
+# default:
+CONFIG_FRAME_AUTH_KEY=""
 # end of PictureFrame settings
 
 #

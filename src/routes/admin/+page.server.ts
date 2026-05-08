@@ -8,8 +8,9 @@ import {
 	disableFrameClaimCodeForOwner,
 	listFrameClaimCodesByOwner
 } from '$lib/server/frame-claim';
+import { createPublicUploadLink } from '$lib/server/public-upload';
 import { fail, redirect } from '@sveltejs/kit';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -22,9 +23,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const frames = await db
-		.select({ id: pictureFrames.id, frameName: pictureFrames.frameName })
-		.from(pictureFrames)
-		.where(isNull(pictureFrames.ownerUserId));
+		.select({ id: pictureFrames.id, frameName: pictureFrames.frameName, claimed: isNotNull(pictureFrames.ownerUserId) })
+		.from(pictureFrames);
 
 	const claimCodes = await listFrameClaimCodesByOwner();
 
@@ -99,6 +99,41 @@ export const actions: Actions = {
 		return {
 			success: true,
 			claimCode: created.code
+		};
+	},
+
+	createUploadCode: async ({ request, locals }) => {
+		if (!locals.user) {
+			return fail(401, { message: 'Unauthorized' });
+		}
+
+		if (!isAdminUser(locals.user)) {
+			return fail(403, { message: 'Forbidden' });
+		}
+
+		const form = await request.formData();
+		const frameId = Number(form.get('frameId'));
+
+		if (!Number.isFinite(frameId) || frameId <= 0) {
+			return fail(400, { message: 'Invalid frame id' });
+		}
+
+		const [frame] = await db
+			.select({ id: pictureFrames.id })
+			.from(pictureFrames)
+			.where(eq(pictureFrames.id, frameId))
+			.limit(1);
+
+		if (!frame) {
+			return fail(404, { message: 'Unclaimed frame not found' });
+		}
+
+		const created = await createPublicUploadLink(frameId);
+
+		return {
+			success: true,
+			uploadCode: created.code,
+			uploadUrl: `/upload?code=${encodeURIComponent(created.code)}`
 		};
 	},
 

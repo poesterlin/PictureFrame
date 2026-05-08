@@ -1,11 +1,19 @@
 <script lang="ts">
 	import { bleProfile } from '$lib/device-contract';
 
+	export let data: {
+		isAdmin: boolean;
+		frames: Array<{ id: number; frameName: string; authKey: string }>;
+	};
+
 	let ssid = '';
 	let password = '';
-	let status = 'Bereit';
+	let selectedFrameId: number | '' = data.frames[0]?.id ?? '';
+	let status = '';
 	let isProvisioning = false;
 	let connectedDeviceName = '';
+
+	$: selectedFrame = data.frames.find((frame) => frame.id === selectedFrameId);
 
 	type BleContext = {
 		device: BluetoothDevice;
@@ -52,6 +60,11 @@
 			return;
 		}
 
+		if (!selectedFrame) {
+			status = 'Kein Frame ausgewählt.';
+			return;
+		}
+
 		isProvisioning = true;
 		let context: BleContext | undefined;
 
@@ -67,42 +80,69 @@
 			const payload = {
 				type: 'wifiProvision',
 				ssid: ssid.trim(),
-				password
+				password,
+				authKey: selectedFrame.authKey
 			};
 			await characteristic.writeValue(encoder.encode(JSON.stringify(payload)));
-			status = `WLAN-Provisioning gesendet an ${connectedDeviceName}.`;
+			status = `Konfiguration gesendet an ${connectedDeviceName}.`;
 		} catch (error) {
-			status = error instanceof Error ? error.message : 'Provisioning fehlgeschlagen.';
+			console.error('Provisioning-Fehler:', error);
+			status = 'Konfiguration fehlgeschlagen.';
 		} finally {
 			disconnect(context);
 			isProvisioning = false;
 		}
 	}
-
 </script>
 
 <section class="connect-wrap">
-	<form class="connect-card" on:submit={onProvision}>
-		<h1>WLAN via Bluetooth</h1>
-		<p class="subtitle">SSID und Passwort direkt an deinen Frame übertragen.</p>
-
-		<div class="field-row">
-			<label for="ssid">SSID</label>
-			<input type="text" id="ssid" bind:value={ssid} autocomplete="off" required />
+	{#if data.frames.length === 0}
+		<div class="connect-card">
+			<h1>Kein Frame</h1>
+			<p class="subtitle">
+				Du hast noch keinen Frame. Registriere dich mit einem Claim-Code, um einen Frame zu
+				erhalten.
+			</p>
 		</div>
-		<div class="field-row">
-			<label for="password">Passwort</label>
-			<input type="password" id="password" bind:value={password} autocomplete="current-password" />
-		</div>
+	{:else}
+		<form class="connect-card" on:submit={onProvision}>
+			<h1>WLAN konfigurieren</h1>
+			<p class="subtitle">SSID und Passwort direkt an deinen Frame übertragen.</p>
 
-		<div class="actions">
-			<button type="submit" disabled={isProvisioning}>
-				{isProvisioning ? 'Sende...' : 'Über Bluetooth übertragen'}
-			</button>
-		</div>
+			{#if data.isAdmin}
+				<div class="field-row">
+					<label for="frame">Frame</label>
+					<select id="frame" bind:value={selectedFrameId}>
+						{#each data.frames as frame}
+							<option value={frame.id}>{frame.frameName}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
 
-		<p class="status">{status}</p>
-	</form>
+			<div class="field-row">
+				<label for="ssid">SSID</label>
+				<input type="text" id="ssid" bind:value={ssid} autocomplete="off" required />
+			</div>
+			<div class="field-row">
+				<label for="password">Passwort</label>
+				<input
+					type="password"
+					id="password"
+					bind:value={password}
+					autocomplete="current-password"
+				/>
+			</div>
+
+			<div class="actions">
+				<button type="submit" disabled={isProvisioning}>
+					{isProvisioning ? 'Sende...' : 'Über Bluetooth übertragen'}
+				</button>
+			</div>
+
+			<p class="status">{status}</p>
+		</form>
+	{/if}
 </section>
 
 <style>
@@ -110,63 +150,62 @@
 		display: grid;
 		place-items: center;
 		padding: clamp(1rem, 4vw, 2rem);
+		font-size: 14px;
 	}
 
 	.connect-card {
-		width: min(700px, 100%);
+		width: min(640px, 100%);
 		display: grid;
-		gap: 0.8rem;
-		padding: clamp(1rem, 3vw, 1.7rem);
-		background: rgba(255, 255, 255, 0.86);
+		gap: 0.75rem;
+		padding: clamp(1rem, 3vw, 1.5rem);
+		background: rgba(255, 255, 255, 0.92);
 		border: 1px solid rgba(17, 24, 39, 0.16);
-		border-radius: 18px;
+		border-radius: 16px;
 		box-shadow: 0 24px 55px -38px rgba(0, 0, 0, 0.6);
 	}
 
 	h1 {
 		margin: 0;
-		font-size: clamp(1.35rem, 3vw, 1.9rem);
+		font-size: 1.4rem;
 	}
 
 	.subtitle {
 		margin: 0;
-		font-size: 0.95rem;
+		font-size: 0.9rem;
 		color: #4b5563;
 	}
 
 	.field-row {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		gap: 0.45rem;
+		display: grid;
+		gap: 0.3rem;
 	}
 
 	label {
-		font-size: 0.88rem;
+		font-size: 0.85rem;
 		font-weight: 600;
 	}
 
-	input {
-		flex: 1 1 100%;
-		padding: 0.72rem 0.8rem;
-		font: inherit;
-		font-size: 0.94rem;
-		border-radius: 10px;
+	input,
+	select {
+		padding: 0.5rem 0.65rem;
+		font-family: inherit;
+		font-size: 0.9rem;
+		border-radius: 8px;
 		border: 1px solid rgba(17, 24, 39, 0.24);
 		background: #fff;
 	}
 
 	.actions {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: 0.65rem;
+		display: flex;
+		gap: 0.5rem;
 		margin-top: 0.2rem;
 	}
 
 	button {
-		font: inherit;
-		padding: 0.75rem 0.85rem;
-		border-radius: 10px;
+		font-family: inherit;
+		font-size: 0.9rem;
+		padding: 0.55rem 0.9rem;
+		border-radius: 8px;
 		border: 1px solid #111827;
 		background: #111827;
 		color: #fff;
@@ -174,14 +213,15 @@
 	}
 
 	button:disabled {
-		opacity: 0.6;
+		opacity: 0.55;
 		cursor: not-allowed;
 	}
 
 	.status {
 		margin: 0.2rem 0 0;
-		font-size: 0.87rem;
+		font-size: 0.85rem;
 		font-weight: 600;
 		color: #374151;
+		min-height: 1em;
 	}
 </style>

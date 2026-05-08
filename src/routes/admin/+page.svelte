@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	export let data: {
 		frames: Array<{ id: number; frameName: string }>;
 		claimCodes: Array<{
@@ -17,13 +18,16 @@
 				success?: boolean;
 				createdFrame?: { id: number; frameName: string };
 				claimCode?: string;
+				uploadCode?: string;
+				uploadUrl?: string;
 				message?: string;
 		  }
 		| undefined;
 
 	let notice = '';
 	let noticeType: 'success' | 'error' = 'success';
-	let newClaimCode = '';
+	let newClaimCode: string | undefined = undefined;
+	let newUploadCode: string | undefined = undefined;
 
 	$: if (form?.createdFrame) {
 		notice = `Frame erstellt: ${form.createdFrame.frameName}`;
@@ -31,8 +35,14 @@
 	}
 
 	$: if (form?.claimCode) {
-		newClaimCode = form.claimCode;
+		newClaimCode = new URL(`/register?inviteCode=${form.claimCode}`, $page.url.origin).toString();
 		notice = 'Claim-Code erstellt.';
+		noticeType = 'success';
+	}
+
+	$: if (form?.uploadCode && form?.uploadUrl) {
+		newUploadCode = new URL(form.uploadUrl, $page.url.origin).toString();
+		notice = 'Upload-Code erstellt.';
 		noticeType = 'success';
 	}
 
@@ -62,85 +72,109 @@
 		notice = 'Claim-Code in die Zwischenablage kopiert.';
 		noticeType = 'success';
 	}
+
+	async function copyUploadCode() {
+		if (!newUploadCode) return;
+		await navigator.clipboard.writeText(newUploadCode);
+		notice = 'Upload-Code in die Zwischenablage kopiert.';
+		noticeType = 'success';
+	}
 </script>
 
 <section class="admin-wrap">
 	<div class="admin-card">
 		<h1>Admin</h1>
-		<p>Hier kannst du einen Geschenk-Frame vorbereiten, der später per Claim-Code übernommen wird.</p>
+		<p class="lede">
+			Hier kannst du einen Geschenk-Frame vorbereiten, der später per Claim-Code übernommen wird.
+		</p>
 
-		<form method="POST" action="?/createGiftFrame">
+		<form method="POST" action="?/createGiftFrame" class="row">
 			<label for="frameName">Frame-Name</label>
 			<input id="frameName" name="frameName" type="text" minlength="2" maxlength="80" required />
-			<button type="submit">Geschenk-Frame erstellen</button>
+			<button type="submit" class="primary">Geschenk-Frame erstellen</button>
 		</form>
 
+		{#if newClaimCode}
+			<div class="code-row">
+				<code>{newClaimCode}</code>
+				<button type="button" class="ghost" on:click={copyClaimCode}>Kopieren</button>
+			</div>
+		{/if}
+
+		{#if newUploadCode}
+			<div class="code-row">
+				<code>{newUploadCode}</code>
+				<button type="button" class="ghost" on:click={copyUploadCode}>Kopieren</button>
+			</div>
+		{/if}
+
+		<h2>Unclaimed Frames</h2>
 		{#if data.frames.length > 0}
 			<div class="codes-list">
 				{#each data.frames as frame}
-					<div class="code-item">
-						<div>
+					<div class="frame-item">
+						<div class="frame-info">
 							<strong>{frame.frameName}</strong>
-							<p>Frame-ID: {frame.id}</p>
+							<span class="muted">ID: {frame.id}</span>
 						</div>
-						<div class="frame-actions">
-							<form method="POST" action="?/createClaimCode">
+					<div class="frame-actions">
+						<form method="POST" action="?/createClaimCode" class="inline">
+							<input
+								id={`claimTtlHours-${frame.id}`}
+								type="number"
+								name="ttlHours"
+								min="1"
+								max="720"
+								value="336"
+								title="Gültig (Stunden)"
+							/>
+							<input type="hidden" name="frameId" value={frame.id} />
+							<button type="submit">Claim-Code</button>
+						</form>
+							<form method="POST" action="?/createUploadCode" class="inline">
 								<input type="hidden" name="frameId" value={frame.id} />
-								<label for={`claimTtlHours-${frame.id}`}>Claim-Code gültig (Stunden)</label>
-								<input
-									id={`claimTtlHours-${frame.id}`}
-									type="number"
-									name="ttlHours"
-									min="1"
-									max="720"
-									value="336"
-								/>
-								<button type="submit">Claim-Code erstellen</button>
+								<button type="submit">Upload-Code</button>
 							</form>
-							<form method="POST" action="?/deleteFrame">
+							<form method="POST" action="?/deleteFrame" class="inline">
 								<input type="hidden" name="frameId" value={frame.id} />
-								<button type="submit">Frame löschen</button>
+								<button type="submit" class="danger">Löschen</button>
 							</form>
 						</div>
 					</div>
 				{/each}
 			</div>
 		{:else}
-			<p>Keine unclaimed Frames vorhanden.</p>
-		{/if}
-
-		{#if newClaimCode}
-			<div class="code-row">
-				<code>{newClaimCode}</code>
-				<button type="button" on:click={copyClaimCode}>Code kopieren</button>
-			</div>
+			<p class="muted">Keine unclaimed Frames vorhanden.</p>
 		{/if}
 
 		{#if data.claimCodes.length > 0}
+			<h2>Claim-Codes</h2>
 			<div class="codes-list">
 				{#each data.claimCodes as code}
-					<div class="code-item">
-						<div>
+					<div class="frame-item">
+						<div class="frame-info">
 							<strong>{code.frameName}</strong>
-							<p>
-								Ablauf: {formatDate(code.expiresAt)} | Status: {claimStatus(
+							<span class="muted">
+								Ablauf: {formatDate(code.expiresAt)} · Status: {claimStatus(
 									code.claimedAt,
 									code.disabled,
 									code.expiresAt
 								)}
-							</p>
+							</span>
 						</div>
-						{#if claimStatus(code.claimedAt, code.disabled, code.expiresAt) === 'active'}
-							<form method="POST" action="?/disableClaimCode">
-								<input type="hidden" name="codeId" value={code.id} />
-								<button type="submit">Code deaktivieren</button>
-							</form>
-						{:else if claimStatus(code.claimedAt, code.disabled, code.expiresAt) === 'disabled'}
-							<form method="POST" action="?/deleteClaimCode">
-								<input type="hidden" name="codeId" value={code.id} />
-								<button type="submit">Code löschen</button>
-							</form>
-						{/if}
+						<div class="frame-actions">
+							{#if claimStatus(code.claimedAt, code.disabled, code.expiresAt) === 'active'}
+								<form method="POST" action="?/disableClaimCode" class="inline">
+									<input type="hidden" name="codeId" value={code.id} />
+									<button type="submit">Deaktivieren</button>
+								</form>
+							{:else if claimStatus(code.claimedAt, code.disabled, code.expiresAt) === 'disabled'}
+								<form method="POST" action="?/deleteClaimCode" class="inline">
+									<input type="hidden" name="codeId" value={code.id} />
+									<button type="submit" class="danger">Löschen</button>
+								</form>
+							{/if}
+						</div>
 					</div>
 				{/each}
 			</div>
@@ -157,62 +191,105 @@
 		display: grid;
 		place-items: center;
 		padding: clamp(1rem, 4vw, 2rem);
+		font-size: 14px;
 	}
 
 	.admin-card {
-		width: min(620px, 100%);
+		width: min(720px, 100%);
 		display: grid;
-		gap: 0.8rem;
-		padding: clamp(1rem, 3vw, 1.8rem);
+		gap: 1rem;
+		padding: clamp(1rem, 3vw, 1.6rem);
 		border-radius: 16px;
-		background: rgba(255, 255, 255, 0.9);
+		background: rgba(255, 255, 255, 0.95);
 		border: 1px solid rgba(15, 23, 42, 0.14);
 		box-shadow: 0 24px 52px -38px rgba(0, 0, 0, 0.6);
 	}
 
 	h1 {
 		margin: 0;
-		font-size: clamp(1.4rem, 4vw, 2rem);
+		font-size: 1.4rem;
 	}
 
-	p {
+	h2 {
+		margin: 0.5rem 0 0;
+		font-size: 1rem;
+		color: #334155;
+	}
+
+	.lede {
 		margin: 0;
-		font-size: 0.94rem;
 		color: #475569;
 	}
 
-	form {
+	.muted {
+		color: #64748b;
+		font-size: 0.85rem;
+	}
+
+	form.row {
 		display: grid;
-		gap: 0.55rem;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	form.inline {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0;
 	}
 
 	label {
-		font-size: 0.84rem;
+		font-size: 0.85rem;
 		font-weight: 600;
 	}
 
 	input {
-		padding: 0.68rem 0.75rem;
-		font: inherit;
-		font-size: 0.95rem;
-		border-radius: 10px;
+		padding: 0.45rem 0.6rem;
+		font-family: inherit;
+		font-size: 0.9rem;
+		border-radius: 8px;
 		border: 1px solid rgba(15, 23, 42, 0.24);
+		background: #fff;
+	}
+
+	input[type='number'] {
+		width: 5.5rem;
 	}
 
 	button {
-		font: inherit;
-		padding: 0.72rem 0.84rem;
-		border-radius: 10px;
+		font-family: inherit;
+		font-size: 0.85rem;
+		padding: 0.45rem 0.75rem;
+		border-radius: 8px;
 		border: 1px solid #0f172a;
 		background: #0f172a;
 		color: #fff;
+		white-space: nowrap;
+	}
+
+	button.primary {
+		background: #0f172a;
+	}
+
+	button.ghost {
+		background: #fff;
+		color: #0f172a;
+		border-color: rgba(15, 23, 42, 0.24);
+	}
+
+	button.danger {
+		background: #b91c1c;
+		border-color: #b91c1c;
 	}
 
 	.notice {
-		padding: 0.65rem 0.75rem;
-		border-radius: 10px;
-		font-size: 0.86rem;
+		padding: 0.55rem 0.7rem;
+		border-radius: 8px;
+		font-size: 0.85rem;
 		font-weight: 600;
+		margin: 0;
 	}
 
 	.codes-list {
@@ -220,37 +297,48 @@
 		gap: 0.5rem;
 	}
 
-	.code-item {
+	.frame-item {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 0.8rem;
-		padding: 0.6rem;
+		gap: 0.75rem;
+		padding: 0.6rem 0.75rem;
 		border-radius: 10px;
 		border: 1px solid rgba(15, 23, 42, 0.14);
+		background: #fafafa;
+		flex-wrap: wrap;
+	}
+
+	.frame-info {
+		display: grid;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+
+	.frame-info strong {
+		font-size: 0.95rem;
 	}
 
 	.frame-actions {
-		display: grid;
-		gap: 0.45rem;
-	}
-
-	.code-item p {
-		margin-top: 0.2rem;
-		font-size: 0.82rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 	}
 
 	.code-row {
-		display: grid;
-		gap: 0.4rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 
 	code {
 		display: block;
-		padding: 0.55rem 0.65rem;
-		font-size: 0.82rem;
+		flex: 1;
+		padding: 0.45rem 0.6rem;
+		font-size: 0.8rem;
 		background: #eef2ff;
 		border-radius: 8px;
+		word-break: break-all;
 	}
 
 	.notice.success {
