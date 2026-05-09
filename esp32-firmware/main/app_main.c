@@ -41,14 +41,23 @@ static void poll_events_until_idle(uint32_t wait_ms);
 
 static void display_update_task(void *arg) {
 	char *artifact_key = (char *)arg;
+	// frame_ws_stop is only needed if the WS is actually running (steady state).
+	// During boot, it might not be started yet.
 	frame_ws_stop();
+
 	if (artifact_key != NULL) {
 		if (!render_from_artifact_key(artifact_key)) {
 			ESP_LOGE(TAG, "display update failed");
 		}
 		free(artifact_key);
 	}
-	frame_ws_start();
+
+	// Only restart the WS if it was previously initialized.
+	// We handle the initial boot-time WS start in app_main.
+	if (s_last_cursor > 0) {
+		frame_ws_start();
+	}
+
 	s_render_in_progress = false;
 	vTaskDelete(NULL);
 }
@@ -208,6 +217,10 @@ static void process_event_envelope(cJSON *envelope) {
 		if (value > s_last_cursor) {
 			s_last_cursor = value;
 		}
+
+		while (s_render_in_progress) {
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
 		frame_api_ack(value);
 	}
 }
@@ -240,6 +253,15 @@ static void apply_snapshot_payload(cJSON *snapshot) {
 		if (value > s_last_cursor) {
 			s_last_cursor = value;
 		}
+
+		// If a display update was triggered above, wait for its handshake
+		// to finish (or the whole task) before we perform our ACK POST.
+		// On the ESP32-C6, concurrent TLS handshakes can exhaust PSA
+		// crypto memory.
+		while (s_render_in_progress) {
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
+
 		// Acknowledge so any commands present in the snapshot are cleared.
 		frame_api_ack(value);
 	}
@@ -414,6 +436,9 @@ void app_main(void) {
 	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
 	}
+
+	// Free up heap by stopping BLE now that WiFi is connected.
+	ble_provisioning_stop();
 
 	// Bearer auth wiring for HTTP + WS clients.
 	frame_api_init(FRAME_BASE_URL, s_settings.frame_auth_key);

@@ -94,7 +94,11 @@ bool frame_ws_init(
 	esp_websocket_client_config_t websocket_cfg = {
 		.uri = s_ws_url,
 		.crt_bundle_attach = esp_crt_bundle_attach,
-		.headers = (s_ws_headers[0] != '\0') ? s_ws_headers : NULL
+		.headers = (s_ws_headers[0] != '\0') ? s_ws_headers : NULL,
+		.reconnect_timeout_ms = 20000,
+		.network_timeout_ms = 20000,
+		// Explicitly set a smaller task stack for the WS client if needed,
+		// but default is usually 4096.
 	};
 	s_client = esp_websocket_client_init(&websocket_cfg);
 	if (s_client == NULL) {

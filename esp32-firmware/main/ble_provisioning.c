@@ -214,3 +214,12 @@ bool ble_provisioning_start(frame_settings_t *settings, ble_wifi_update_handler_
 	ESP_LOGI(TAG, "BLE provisioning active (service ec00)");
 	return true;
 }
+
+void ble_provisioning_stop(void) {
+	int rc = nimble_port_stop();
+	if (rc != 0) {
+		ESP_LOGE(TAG, "nimble_port_stop failed: %d", rc);
+	}
+	nimble_port_deinit();
+	ESP_LOGI(TAG, "BLE provisioning stopped");
+}
