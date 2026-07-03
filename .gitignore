@@ -30,3 +30,5 @@ data/frames/*
 esp32-firmware/build/
 esp32-firmware/managed_components/
 esp32-firmware/sdkconfig.old
+
+frame_data/
