@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
- 	import type { ActionData } from './$types';
+	import type { ActionData } from './$types';
 
 	export let form: ActionData;
 </script>
@@ -10,69 +9,53 @@
 <div class="background">
 	<div class="card">
 		<div class="content">
-			<h2>Welcome Back!</h2>
+			<h2>Local Password Reset</h2>
+			<p class="intro">For local recovery only. Enter your username and set a new password.</p>
 
-			<form method="POST" action="?/login" use:enhance>
+			<form method="POST" action="?/reset" use:enhance>
 				<div>
 					<label for="username">Username</label>
+					<input type="text" id="username" name="username" autocomplete="username" required />
+				</div>
+
+				<div>
+					<label for="password">New password</label>
 					<input
-						type="text"
-						id="username"
-						name="username"
-						autocomplete="username"
-						placeholder="Your username"
+						type="password"
+						id="password"
+						name="password"
+						autocomplete="new-password"
 						required
 					/>
 				</div>
 
 				<div>
-					<label for="password">Password</label>
+					<label for="confirmPassword">Confirm new password</label>
 					<input
 						type="password"
-						id="password"
-						name="password"
-						autocomplete="current-password"
-						placeholder="........"
+						id="confirmPassword"
+						name="confirmPassword"
+						autocomplete="new-password"
 						required
 					/>
 				</div>
 
 				{#if form?.message}
-					<p class="message" transition:fade>
-						{form.message}
-					</p>
+					<p class="message" class:success={form?.success} transition:fade>{form.message}</p>
 				{/if}
 
-				<input type="hidden" name="redirect" value={$page.url.search} />
-
-				<button type="submit">Login</button>
+				<button type="submit">Reset password</button>
 			</form>
 
 			<p class="footer-copy">
-				New around here?
-				<a href="/register{$page.url.search}">Create an account!</a>
-			</p>
-			<p class="footer-copy reset-copy">
-				Forgot your password?
-				<a href="/reset-password">Reset it locally</a>
+				Back to <a href="/login">login</a>
 			</p>
 		</div>
-		<div class="meta">Made with <span aria-hidden="true">&hearts;</span> for awesome people!</div>
 	</div>
 </div>
 
 <style>
-	h2 {
-		view-transition-name: login-header;
-	}
-
-	.card {
-		view-transition-name: login-card;
-		max-width: 95vw;
-	}
-
 	.background {
-		view-transition-name: login-background;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -81,7 +64,7 @@
 	}
 
 	.card {
-		width: min(100%, 28rem);
+		width: min(100%, 30rem);
 		overflow: hidden;
 		border-radius: 0.5rem;
 		background: #fff;
@@ -93,10 +76,17 @@
 	}
 
 	h2 {
-		margin: 0 0 1.5rem;
+		margin: 0;
 		text-align: center;
-		font-size: 1.9rem;
+		font-size: 1.6rem;
 		font-weight: 600;
+	}
+
+	.intro {
+		margin: 0.75rem 0 1.25rem;
+		text-align: center;
+		font-size: 0.95rem;
+		color: #4b5563;
 	}
 
 	form {
@@ -138,7 +128,11 @@
 		margin: 0;
 		text-align: center;
 		font-size: 0.9rem;
-		color: #c026d3;
+		color: #b91c1c;
+	}
+
+	.message.success {
+		color: #047857;
 	}
 
 	.footer-copy {
@@ -148,20 +142,8 @@
 		color: #4b5563;
 	}
 
-	.reset-copy {
-		margin-top: 0.55rem;
-	}
-
 	a {
 		color: #f43f5e;
 		text-decoration: none;
-	}
-
-	.meta {
-		padding: 0.7rem 1rem;
-		text-align: center;
-		font-size: 0.75rem;
-		color: #6b7280;
-		background: #fce7f3;
 	}
 </style>
