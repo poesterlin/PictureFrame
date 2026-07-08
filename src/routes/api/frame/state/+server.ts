@@ -18,13 +18,18 @@ export const POST: RequestHandler = async (event) => {
 		receivedAt: new Date().toISOString()
 	});
 
-	await db.update(pictureFrames).set({ lastSeenAt: new Date() }).where(eq(pictureFrames.id, auth.frameId));
+	await db
+		.update(pictureFrames)
+		.set({ lastSeenAt: new Date() })
+		.where(eq(pictureFrames.id, auth.frameId));
 
 	// Heartbeat is the regular tick the device uses for liveness + event
 	// catch-up. The server (not the device) decides when it's time to rotate
 	// to a new picture.
 	const outcome = await maybeRotate(auth.frameId);
-	console.log(`[rotation] frame=${auth.frameId} -> ${outcome.rotated ? `rotated to ${outcome.artifactKey}` : `no rotation (${outcome.reason})`}`);
+	console.log(
+		`[rotation] frame=${auth.frameId} -> ${outcome.rotated ? `rotated to ${outcome.artifactKey}` : `no rotation (${outcome.reason})`}`
+	);
 
 	return new Response(JSON.stringify({ ok: true }), {
 		headers: { 'content-type': 'application/json' }

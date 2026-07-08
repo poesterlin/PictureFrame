@@ -17,7 +17,10 @@ function parseFrameId(value: string | null) {
 	return frameId;
 }
 
-async function resolveFrameForRequest(user: { id: string; username: string }, frameIdParam: string | null) {
+async function resolveFrameForRequest(
+	user: { id: string; username: string },
+	frameIdParam: string | null
+) {
 	const isAdmin = isAdminUser(user);
 	const requestedFrameId = parseFrameId(frameIdParam);
 
@@ -60,9 +63,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	const rows = await db
 		.select({ fileName: pictures.fileName, favorite: pictures.favorite, skipped: pictures.skipped })
 		.from(pictures)
-		.where(
-			eq(pictures.frameId, frame.id)
-		);
+		.where(eq(pictures.frameId, frame.id));
 
 	const flagsByKey = Object.fromEntries(
 		rows.map((row) => [row.fileName, { favorite: row.favorite, skipped: row.skipped }])
@@ -98,9 +99,7 @@ export const PATCH: RequestHandler = async ({ request, locals, url }) => {
 	const [current] = await db
 		.select({ id: pictures.id, favorite: pictures.favorite, skipped: pictures.skipped })
 		.from(pictures)
-		.where(
-			and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id))
-		)
+		.where(and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id)))
 		.limit(1);
 
 	if (!current) {

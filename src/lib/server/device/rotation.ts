@@ -6,9 +6,7 @@ import { pickRandomPictureForFrame } from './picker';
 
 const channel = getDeviceChannel();
 
-type RotationOutcome =
-	| { rotated: true; artifactKey: string }
-	| { rotated: false; reason: string };
+type RotationOutcome = { rotated: true; artifactKey: string } | { rotated: false; reason: string };
 
 /**
  * Decides whether the given frame should advance to a new picture and, if so,

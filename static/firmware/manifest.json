@@ -1,0 +1,11 @@
+{
+	"name": "PictureFrame",
+	"version": "0.1.0",
+	"new_install_prompt_erase": true,
+	"builds": [
+		{
+			"chipFamily": "ESP32-C6",
+			"parts": [{ "path": "/firmware/merged.bin", "offset": 0 }]
+		}
+	]
+}

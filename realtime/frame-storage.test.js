@@ -14,7 +14,16 @@ import {
 const WIDTH = 800;
 const HEIGHT = 480;
 const PIXELS = WIDTH * HEIGHT;
-const HEADER_RAW = Buffer.from(['P'.charCodeAt(0), 'F'.charCodeAt(0), '7'.charCodeAt(0), 'A'.charCodeAt(0), 0x20, 0x03, 0xe0, 0x01]);
+const HEADER_RAW = Buffer.from([
+	'P'.charCodeAt(0),
+	'F'.charCodeAt(0),
+	'7'.charCodeAt(0),
+	'A'.charCodeAt(0),
+	0x20,
+	0x03,
+	0xe0,
+	0x01
+]);
 
 test('passes through valid pf7a payloads', () => {
 	const pixels = Buffer.alloc(PIXELS, 1);

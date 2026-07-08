@@ -22,7 +22,10 @@ function parseFrameId(value: string | null) {
 	return frameId;
 }
 
-async function resolveFrameForRequest(user: { id: string; username: string }, frameIdParam: string | null) {
+async function resolveFrameForRequest(
+	user: { id: string; username: string },
+	frameIdParam: string | null
+) {
 	const isAdmin = isAdminUser(user);
 	const requestedFrameId = parseFrameId(frameIdParam);
 
@@ -56,7 +59,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		error(401, 'Unauthorized');
 	}
 
-	const frame = await resolveFrameForRequest(locals.user, new URL(request.url).searchParams.get('frameId'));
+	const frame = await resolveFrameForRequest(
+		locals.user,
+		new URL(request.url).searchParams.get('frameId')
+	);
 
 	if (!frame) {
 		error(404, 'Kein Rahmen gefunden');
@@ -96,7 +102,10 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		error(401, 'Unauthorized');
 	}
 
-	const frame = await resolveFrameForRequest(locals.user, new URL(request.url).searchParams.get('frameId'));
+	const frame = await resolveFrameForRequest(
+		locals.user,
+		new URL(request.url).searchParams.get('frameId')
+	);
 
 	if (!frame) {
 		error(404, 'Kein Rahmen gefunden');
@@ -110,10 +119,7 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 	const key = body.key;
 	const deleteScope = and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id));
 
-	const deletedRows = await db
-		.delete(pictures)
-		.where(deleteScope)
-		.returning({ id: pictures.id });
+	const deletedRows = await db.delete(pictures).where(deleteScope).returning({ id: pictures.id });
 
 	if (deletedRows.length === 0) {
 		error(404, 'Bild nicht gefunden');

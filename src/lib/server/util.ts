@@ -33,7 +33,7 @@ export type MaybePromise<T> = T | Promise<T>;
 export type FormAction<
 	T,
 	Params extends Record<string, never> = Record<string, never>,
-	OutputData extends Record<string, any> | void = Record<string, any> | void,
+	OutputData extends Record<string, any> | void = Record<string, any> | void
 > = (event: RequestEvent<Params, RouteId>, form: T) => MaybePromise<OutputData>;
 
 export function validateForm<T extends ZodObject<any>, Form extends z.infer<T>>(

@@ -36,5 +36,3 @@ const workerApi = {
 export type DitheringWorkerApi = typeof workerApi;
 
 expose(workerApi);
-
-

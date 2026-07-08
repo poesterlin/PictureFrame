@@ -32,9 +32,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const body = (await request.json()) as Record<string, unknown>;
 
 	if (typeof body.key === 'string' || typeof body.artifactKey === 'string') {
-		const resolvedArtifactKey = typeof body.artifactKey === 'string'
-			? body.artifactKey
-			: (body.key as string).replace(/\.[^./]+$/i, '.pf7a');
+		const resolvedArtifactKey =
+			typeof body.artifactKey === 'string'
+				? body.artifactKey
+				: (body.key as string).replace(/\.[^./]+$/i, '.pf7a');
 		const message: DisplayUpdateMessage = {
 			type: 'display',
 			requestId: typeof body.requestId === 'string' ? body.requestId : crypto.randomUUID(),

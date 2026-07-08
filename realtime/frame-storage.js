@@ -65,10 +65,12 @@ function hasValidDimensions(payload) {
 
 /** @param {Buffer} payload */
 function isRawPf7a(payload) {
-	return payload.length >= PF7A_HEADER_SIZE
-		&& payload.subarray(0, 4).equals(PF7A_MAGIC)
-		&& hasValidDimensions(payload)
-		&& payload.length === PF7A_HEADER_SIZE + FRAME_PIXEL_COUNT;
+	return (
+		payload.length >= PF7A_HEADER_SIZE &&
+		payload.subarray(0, 4).equals(PF7A_MAGIC) &&
+		hasValidDimensions(payload) &&
+		payload.length === PF7A_HEADER_SIZE + FRAME_PIXEL_COUNT
+	);
 }
 
 /** @param {Buffer} pixels */

@@ -72,7 +72,6 @@
 		{ label: '1 h', value: 3600 },
 		{ label: '3 h', value: 10800 }
 	];
-
 </script>
 
 <section class="settings-wrap">
@@ -101,14 +100,11 @@
 						<button
 							type="button"
 							class="preset"
-							on:click={() => (settings.refreshEvery = preset.value)}
-						>{preset.label}</button
+							on:click={() => (settings.refreshEvery = preset.value)}>{preset.label}</button
 						>
 					{/each}
 				</div>
-				<button class="primary" type="submit">
-					Einstellungen speichern
-				</button>
+				<button class="primary" type="submit"> Einstellungen speichern </button>
 			</div>
 
 			{#if notice}
@@ -120,7 +116,8 @@
 			<h2>Upload-Link</h2>
 			{#if data.frame}
 				<p class="subtitle">
-					Sende diesen Link an Freunde und Familie, damit sie Fotos direkt auf deinen Rahmen hochladen können.
+					Sende diesen Link an Freunde und Familie, damit sie Fotos direkt auf deinen Rahmen
+					hochladen können.
 				</p>
 				<form method="POST" action="?/createUploadLink" class="link-form" use:enhance>
 					<input type="hidden" name="frameId" value={data.frame.id} />
@@ -139,7 +136,9 @@
 						{#each data.links as link}
 							<div class="link-row">
 								<div>
-									<p>{link.uploadCount} Hochladungen {#if link.disabled}| deaktiviert{/if}</p>
+									<p>
+										{link.uploadCount} Hochladungen {#if link.disabled}| deaktiviert{/if}
+									</p>
 								</div>
 								{#if !link.disabled}
 									<form method="POST" action="?/disableUploadLink">
@@ -171,8 +170,7 @@
 	:global(body) {
 		background:
 			radial-gradient(circle at 0% 0%, rgba(255, 76, 76, 0.15), transparent 42%),
-			radial-gradient(circle at 100% 0%, rgba(15, 15, 15, 0.12), transparent 36%),
-			#e6ecef;
+			radial-gradient(circle at 100% 0%, rgba(15, 15, 15, 0.12), transparent 36%), #e6ecef;
 	}
 
 	.settings-wrap {
@@ -304,7 +302,7 @@
 		grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
 	}
 
-	button{
+	button {
 		font: inherit;
 		font-size: 0.9rem;
 		padding: 0.72rem 0.8rem;
@@ -314,10 +312,13 @@
 		color: #111827;
 		text-decoration: none;
 		text-align: center;
-		transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+		transition:
+			transform 120ms ease,
+			box-shadow 120ms ease,
+			border-color 120ms ease;
 	}
 
-	button:hover{
+	button:hover {
 		transform: translateY(-1px);
 		border-color: rgba(17, 24, 39, 0.38);
 		box-shadow: 0 8px 20px -16px rgba(0, 0, 0, 0.65);

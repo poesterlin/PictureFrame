@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
- 	import type { ActionData } from './$types';
+	import type { ActionData } from './$types';
 
 	export let form: ActionData;
 </script>

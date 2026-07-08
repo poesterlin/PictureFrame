@@ -32,7 +32,10 @@ export async function createFrameClaimCodeForOwner(
 		return null;
 	}
 
-	const ttlHours = Math.max(1, Math.min(24 * 30, Math.floor(options?.ttlHours ?? DEFAULT_CLAIM_TTL_HOURS)));
+	const ttlHours = Math.max(
+		1,
+		Math.min(24 * 30, Math.floor(options?.ttlHours ?? DEFAULT_CLAIM_TTL_HOURS))
+	);
 
 	const now = new Date();
 	const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
@@ -112,9 +115,15 @@ export async function deleteDisabledFrameClaimCodeForOwner(codeId: number) {
 
 type ClaimResult =
 	| { ok: true; frameId: number; frameName: string }
-	| { ok: false; reason: 'invalid_or_expired' | 'already_claimed' | 'already_has_frame' | 'transfer_failed' };
+	| {
+			ok: false;
+			reason: 'invalid_or_expired' | 'already_claimed' | 'already_has_frame' | 'transfer_failed';
+	  };
 
-export async function claimFrameByCode(rawCode: string, claimantUserId: string): Promise<ClaimResult> {
+export async function claimFrameByCode(
+	rawCode: string,
+	claimantUserId: string
+): Promise<ClaimResult> {
 	const normalizedCode = normalizeCode(rawCode);
 	if (!normalizedCode) {
 		return { ok: false, reason: 'invalid_or_expired' };

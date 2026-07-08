@@ -161,9 +161,7 @@
 				throw new Error(`Upload fehlgeschlagen (${response.status})`);
 			}
 
-			await Promise.all([
-				new Promise((res) => setTimeout(res, 1500))
-			]);
+			await Promise.all([new Promise((res) => setTimeout(res, 1500))]);
 		} catch (error) {
 			alert(error);
 		}
@@ -448,7 +446,9 @@
 		border: 2px dashed transparent;
 		border-radius: 20px;
 		padding: 0.7rem 0 1.1rem;
-		transition: border-color 0.2s ease, background-color 0.2s ease;
+		transition:
+			border-color 0.2s ease,
+			background-color 0.2s ease;
 		max-width: min(86vw, 560px);
 		margin: 2rem auto 0;
 	}

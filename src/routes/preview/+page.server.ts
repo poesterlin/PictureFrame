@@ -37,7 +37,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		.where(isAdmin ? undefined : eq(pictureFrames.ownerUserId, locals.user.id));
 
 	const selectedFrame =
-		(requestedFrameId ? frames.find((frame) => frame.id === requestedFrameId) : null) ?? frames[0] ?? null;
+		(requestedFrameId ? frames.find((frame) => frame.id === requestedFrameId) : null) ??
+		frames[0] ??
+		null;
 
 	if (!selectedFrame) {
 		if (!isAdmin) {

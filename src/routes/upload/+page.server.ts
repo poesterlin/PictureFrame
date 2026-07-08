@@ -98,7 +98,12 @@ export const actions: Actions = {
 		const frame = encodeFrameArtifact(txt, frameFormat.width, frameFormat.height);
 		const normalizedRequestId = requestId.replace('.', '');
 
-		const stored = await storeFrameArtifacts(frameBucket, normalizedRequestId, Buffer.from(txt), frame);
+		const stored = await storeFrameArtifacts(
+			frameBucket,
+			normalizedRequestId,
+			Buffer.from(txt),
+			frame
+		);
 		console.log('stored local frame', stored.artifactKey);
 
 		const uploaderName = typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'Gast';

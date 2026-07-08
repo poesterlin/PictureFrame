@@ -57,7 +57,9 @@ export async function authenticateFrameToken(token: string): Promise<Authenticat
 	return frame[0];
 }
 
-export async function authenticateFrameRequest(headers: Headers): Promise<AuthenticatedFrame | null> {
+export async function authenticateFrameRequest(
+	headers: Headers
+): Promise<AuthenticatedFrame | null> {
 	const token = readBearerToken(headers);
 	if (!token) {
 		return null;
@@ -74,7 +76,9 @@ export function unauthorizedHttpResponse(): Response {
 	});
 }
 
-export async function authenticateFrameWsRequest(request: Request): Promise<AuthenticatedFrame | null> {
+export async function authenticateFrameWsRequest(
+	request: Request
+): Promise<AuthenticatedFrame | null> {
 	const bearer = readBearerToken(request.headers);
 	if (bearer) {
 		return authenticateFrameToken(bearer);

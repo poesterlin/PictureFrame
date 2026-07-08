@@ -13,7 +13,10 @@ import { manifest } from '../build/server/manifest.js';
 
 const port = Number(process.env.PORT || 3000);
 const channel = getDeviceChannel();
-const staticRoots = [resolve(import.meta.dir, '../build/client'), resolve(import.meta.dir, '../static')];
+const staticRoots = [
+	resolve(import.meta.dir, '../build/client'),
+	resolve(import.meta.dir, '../static')
+];
 let _sql: ReturnType<typeof postgres> | null = null;
 
 async function serveStaticAsset(pathname: string): Promise<Response | null> {

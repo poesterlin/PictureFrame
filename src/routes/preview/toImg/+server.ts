@@ -15,39 +15,39 @@ const PANEL_WIDTH = 800;
 const PANEL_HEIGHT = 480;
 
 const palette = [
-    toHex(0, 0, 0),
-    toHex(255, 255, 255),
-    toHex(0, 255, 0),
-    toHex(0, 0, 255),
-    toHex(255, 0, 0),
-    toHex(255, 255, 0),
-    toHex(255, 128, 0)
+	toHex(0, 0, 0),
+	toHex(255, 255, 255),
+	toHex(0, 255, 0),
+	toHex(0, 0, 255),
+	toHex(255, 0, 0),
+	toHex(255, 255, 0),
+	toHex(255, 128, 0)
 ];
 
 function toHex(r: number, g: number, b: number) {
-    const pad = (v: string) => v.padStart(2, '0');
-    return parseInt(`${pad(r.toString(16))}${pad(g.toString(16))}${pad(b.toString(16))}ff`, 16);
+	const pad = (v: string) => v.padStart(2, '0');
+	return parseInt(`${pad(r.toString(16))}${pad(g.toString(16))}${pad(b.toString(16))}ff`, 16);
 }
 
 function expectedPayloadLength() {
-    return PANEL_WIDTH * PANEL_HEIGHT;
+	return PANEL_WIDTH * PANEL_HEIGHT;
 }
 
 function renderImage(payload: Uint8Array, divisions: number) {
-    const image = new Jimp({
-        width: PANEL_WIDTH / divisions,
-        height: PANEL_HEIGHT / divisions,
-        color: palette[0]
-    });
+	const image = new Jimp({
+		width: PANEL_WIDTH / divisions,
+		height: PANEL_HEIGHT / divisions,
+		color: palette[0]
+	});
 
-    for (let i = 0; i < payload.length; i++) {
-        const x = i % PANEL_WIDTH;
-        const y = Math.floor(i / PANEL_WIDTH);
-        const color = palette[payload[i]] ?? palette[0];
-        image.setPixelColor(color, Math.floor(x / divisions), Math.floor(y / divisions));
-    }
+	for (let i = 0; i < payload.length; i++) {
+		const x = i % PANEL_WIDTH;
+		const y = Math.floor(i / PANEL_WIDTH);
+		const color = palette[payload[i]] ?? palette[0];
+		image.setPixelColor(color, Math.floor(x / divisions), Math.floor(y / divisions));
+	}
 
-    return image;
+	return image;
 }
 
 function parseFrameId(value: string | null) {
@@ -63,7 +63,10 @@ function parseFrameId(value: string | null) {
 	return frameId;
 }
 
-async function resolveFrameForRequest(user: { id: string; username: string }, frameIdParam: string | null) {
+async function resolveFrameForRequest(
+	user: { id: string; username: string },
+	frameIdParam: string | null
+) {
 	const isAdmin = isAdminUser(user);
 	const requestedFrameId = parseFrameId(frameIdParam);
 

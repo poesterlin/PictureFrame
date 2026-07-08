@@ -33,6 +33,10 @@
 					<h2>WLAN verbinden</h2>
 					<p>WLAN Setup für den Frame starten.</p>
 				</a>
+				<a class="card" href="/firmware">
+					<h2>Firmware Update</h2>
+					<p>ESP32 Firmware per USB aktualisieren.</p>
+				</a>
 			</div>
 			<div class="auth-row">
 				{#if !data.isAdmin}
@@ -45,7 +49,8 @@
 		<div class="hero party">
 			<h1>Dein Frame</h1>
 			<p class="lead">
-				Um deinen Frame einzurichten, benötigst du einen Invite-Code. Mit deinem Frame hast du einen Code erhalten der dich zur Registrierung berechtigt.
+				Um deinen Frame einzurichten, benötigst du einen Invite-Code. Mit deinem Frame hast du einen
+				Code erhalten der dich zur Registrierung berechtigt.
 			</p>
 			<div class="auth-row">
 				<a class="button subtle" href="/login?redirect=%2F">Login</a>

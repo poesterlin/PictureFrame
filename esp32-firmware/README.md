@@ -18,12 +18,12 @@ Current wiring for the XIAO ESP32-C6 e-paper breakout (silkscreen label -> ESP32
 
 - `VCC` -> `3V3` (or module-required supply voltage)
 - `GND` -> `GND`
-- `SCLK` -> `D8`  (GPIO19)
-- `DIN`  -> `D10` (GPIO18)
-- `CS`   -> `D1`  (GPIO1)
-- `DC`   -> `D3`  (GPIO21)
-- `RST`  -> `D0`  (GPIO0)
-- `BUSY` -> `D5`  (GPIO23)
+- `SCLK` -> `D8` (GPIO19)
+- `DIN` -> `D10` (GPIO18)
+- `CS` -> `D1` (GPIO1)
+- `DC` -> `D3` (GPIO21)
+- `RST` -> `D0` (GPIO0)
+- `BUSY` -> `D5` (GPIO23)
 
 Use the display/HAT in **4-line SPI** mode. The legacy Raspberry Pi driver uses separate SPI data plus `CS`, `DC`, `RST`, and `BUSY` control lines; 3-line SPI is not compatible with this firmware wiring.
 
@@ -88,11 +88,11 @@ Display update payload:
 
 ```json
 {
-  "type": "display",
-  "requestId": "abc123",
-  "createdAt": "2026-04-29T09:00:00.000Z",
-  "artifactKey": "submitions/user/abc123.pf7a",
-  "legacyKey": "submitions/user/abc123.txt"
+	"type": "display",
+	"requestId": "abc123",
+	"createdAt": "2026-04-29T09:00:00.000Z",
+	"artifactKey": "submitions/user/abc123.pf7a",
+	"legacyKey": "submitions/user/abc123.txt"
 }
 ```
 

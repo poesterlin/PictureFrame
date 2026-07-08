@@ -27,7 +27,9 @@ export type FrameChannelEvent = {
 
 type Waiter = () => void;
 
-function isCommandMessage(message: DisplayUpdateMessage | DeviceCommandMessage): message is DeviceCommandMessage {
+function isCommandMessage(
+	message: DisplayUpdateMessage | DeviceCommandMessage
+): message is DeviceCommandMessage {
 	return message.type === 'command';
 }
 
@@ -74,7 +76,10 @@ function createChannel() {
 		return created;
 	}
 
-	function pushEvent(frameId: number, message: DisplayUpdateMessage | DeviceCommandMessage): FrameChannelEvent {
+	function pushEvent(
+		frameId: number,
+		message: DisplayUpdateMessage | DeviceCommandMessage
+	): FrameChannelEvent {
 		const state = getOrCreateState(frameId);
 		const ev: FrameChannelEvent = {
 			cursor: state.cursor + 1,
@@ -106,7 +111,9 @@ function createChannel() {
 			state.lastDisplayedAt = Date.now();
 			const sql = getSql();
 			if (sql) {
-				sql`update picture_frames set last_displayed_at = now() where id = ${frameId}`.catch(() => {});
+				sql`update picture_frames set last_displayed_at = now() where id = ${frameId}`.catch(
+					() => {}
+				);
 			}
 			return pushEvent(frameId, msg);
 		},
@@ -127,7 +134,11 @@ function createChannel() {
 				cursor: state.cursor
 			};
 		},
-		async getEventsSince(frameId: number, cursor: number, waitMs: number): Promise<{ events: FrameChannelEvent[]; cursor: number }> {
+		async getEventsSince(
+			frameId: number,
+			cursor: number,
+			waitMs: number
+		): Promise<{ events: FrameChannelEvent[]; cursor: number }> {
 			const state = getOrCreateState(frameId);
 			const immediate = eventsAfter(state, cursor);
 			if (immediate.length > 0 || waitMs <= 0) {
@@ -184,7 +195,9 @@ function createChannel() {
 }
 
 export function getDeviceChannel() {
-	const world = globalThis as typeof globalThis & { [CHANNEL_KEY]?: ReturnType<typeof createChannel> };
+	const world = globalThis as typeof globalThis & {
+		[CHANNEL_KEY]?: ReturnType<typeof createChannel>;
+	};
 	if (!world[CHANNEL_KEY]) {
 		world[CHANNEL_KEY] = createChannel();
 	}

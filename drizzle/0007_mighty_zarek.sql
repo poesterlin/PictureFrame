@@ -1,0 +1,1 @@
+ALTER TABLE "picture_frames" ADD COLUMN "fw_version" text;

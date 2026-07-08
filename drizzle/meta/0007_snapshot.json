@@ -1,6 +1,6 @@
 {
-	"id": "5e465830-0e49-4f68-b614-4875a7c433ac",
-	"prevId": "b2206645-ae24-4c5c-a2f4-0156b9fb9bf3",
+	"id": "60dff04b-083f-4aef-b102-fbc7dd985df6",
+	"prevId": "7cffbc51-abc0-47ba-a84e-b37498f00954",
 	"version": "7",
 	"dialect": "postgresql",
 	"tables": {
@@ -163,6 +163,24 @@
 					"notNull": true,
 					"default": false
 				},
+				"fw_version": {
+					"name": "fw_version",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"last_seen_at": {
+					"name": "last_seen_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"last_displayed_at": {
+					"name": "last_displayed_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "timestamp with time zone",
@@ -235,12 +253,6 @@
 					"primaryKey": false,
 					"notNull": true
 				},
-				"owner_user_id": {
-					"name": "owner_user_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": false
-				},
 				"uploader_name": {
 					"name": "uploader_name",
 					"type": "text",
@@ -283,15 +295,6 @@
 					"columnsFrom": ["frame_id"],
 					"columnsTo": ["id"],
 					"onDelete": "cascade",
-					"onUpdate": "cascade"
-				},
-				"pictures_owner_user_id_user_id_fk": {
-					"name": "pictures_owner_user_id_user_id_fk",
-					"tableFrom": "pictures",
-					"tableTo": "user",
-					"columnsFrom": ["owner_user_id"],
-					"columnsTo": ["id"],
-					"onDelete": "set null",
 					"onUpdate": "cascade"
 				}
 			},

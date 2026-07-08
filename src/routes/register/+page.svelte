@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
-  	import type { ActionData } from './$types';
+	import type { ActionData } from './$types';
 
 	export let data: { inviteCode: string };
 	export let form: ActionData;
@@ -33,24 +33,12 @@
 
 				<div>
 					<label for="username">Username</label>
-					<input
-						type="text"
-						id="username"
-						name="username"
-						placeholder="Pick a username"
-						required
-					/>
+					<input type="text" id="username" name="username" placeholder="Pick a username" required />
 				</div>
 
 				<div>
 					<label for="password">Password</label>
-					<input
-						type="password"
-						id="password"
-						name="password"
-						placeholder="........"
-						required
-					/>
+					<input type="password" id="password" name="password" placeholder="........" required />
 				</div>
 
 				{#if form?.message}

@@ -17,7 +17,7 @@ export function generatePublicUploadCode() {
 export async function createPublicUploadLink(frameId: number) {
 	const ttlHours = DEFAULT_LINK_TTL_HOURS;
 	const now = new Date();
-	const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000); 
+	const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
 	const code = generatePublicUploadCode();
 	const normalizedCode = normalizeCode(code);
 
@@ -69,7 +69,10 @@ export async function consumeUploadLink(linkId: number) {
 }
 
 export async function disableUploadLink(linkId: number) {
-	await db.update(publicUploadLinks).set({ disabled: true }).where(eq(publicUploadLinks.id, linkId));
+	await db
+		.update(publicUploadLinks)
+		.set({ disabled: true })
+		.where(eq(publicUploadLinks.id, linkId));
 }
 
 export async function deleteUploadLink(linkId: number) {

@@ -24,7 +24,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const frames = await db
-		.select({ id: pictureFrames.id, frameName: pictureFrames.frameName, claimed: isNotNull(pictureFrames.ownerUserId) })
+		.select({
+			id: pictureFrames.id,
+			frameName: pictureFrames.frameName,
+			claimed: isNotNull(pictureFrames.ownerUserId)
+		})
 		.from(pictureFrames);
 
 	const claimCodes = await listFrameClaimCodesByOwner();
@@ -51,7 +55,6 @@ export const actions: Actions = {
 		if (frameName.length < 2 || frameName.length > 80) {
 			return fail(400, { message: 'Frame name must be between 2 and 80 characters' });
 		}
-
 
 		const now = new Date();
 		const inserted = await db

@@ -26,7 +26,12 @@ export const POST: RequestHandler = async (event) => {
 		});
 	}
 
-	await db.update(pictureFrames).set({ lastSeenAt: new Date() }).where(eq(pictureFrames.id, auth.frameId));
+	const updateData: Record<string, unknown> = { lastSeenAt: new Date() };
+	if (payload && typeof payload.fwVersion === 'string') {
+		updateData.fwVersion = payload.fwVersion;
+	}
+
+	await db.update(pictureFrames).set(updateData).where(eq(pictureFrames.id, auth.frameId));
 
 	// On hello (boot), make sure the frame has something to show. maybeRotate
 	// handles both "no display yet" and "interval elapsed since last rotation".

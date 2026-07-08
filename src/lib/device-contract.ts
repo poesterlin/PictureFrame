@@ -1,4 +1,4 @@
-export const DEVICE_PROTOCOL_VERSION = 1;
+export const DEVICE_PROTOCOL_VERSION = 2;
 
 export const bleProfile = {
 	serviceUuid: '0000ec00-0000-1000-8000-00805f9b34fb',
@@ -11,6 +11,11 @@ export const frameFormat = {
 	height: 480,
 	paletteSize: 7
 } as const;
+
+export interface HelloMessage {
+	type: 'hello';
+	fwVersion?: string;
+}
 
 export interface DisplayUpdateMessage {
 	type: 'display';

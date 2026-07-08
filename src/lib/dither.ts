@@ -12,17 +12,16 @@ export const palette: color[] = [
 ];
 
 export interface DrawingOptions {
-	fill: boolean,
-	overlayName: string,
-	diff: { x: number, y: number },
-	brightness: number,
-	saturation: number,
-	contrastMode: boolean,
+	fill: boolean;
+	overlayName: string;
+	diff: { x: number; y: number };
+	brightness: number;
+	saturation: number;
+	contrastMode: boolean;
 	context?: context2d;
 	quick?: boolean;
 	clear: boolean;
 }
-
 
 export function optimizeForScreen(data: Uint8ClampedArray, threshold: number) {
 	let totalReds = 0;
@@ -48,7 +47,7 @@ export function optimizeForScreen(data: Uint8ClampedArray, threshold: number) {
 					if (r > 120 && g > 80 && g < 200 && b < 200) {
 						reds += 1;
 						const value = Math.max(-y1 / 350, -0.5);
-						const gray = 0.2989 * r + 0.5870 * g + 0.1140 * b; // weights from CCIR 601 spec
+						const gray = 0.2989 * r + 0.587 * g + 0.114 * b; // weights from CCIR 601 spec
 
 						data[i] = -gray * value + r * (1 + value) + 15;
 						data[i + 1] = -gray * value + g * (1 + value) + 15;
@@ -175,16 +174,15 @@ export function changeSaturation(data: Uint8ClampedArray, value: number) {
 		const g = data[i + 1];
 		const b = data[i + 2];
 
-		const gray = 0.2989 * r + 0.5870 * g + 0.1140 * b; // weights from CCIR 601 spec
+		const gray = 0.2989 * r + 0.587 * g + 0.114 * b; // weights from CCIR 601 spec
 		data[i] = -gray * value + r * (1 + value) * 1.1;
 		data[i + 1] = -gray * value + g * (1 + value);
 		data[i + 2] = -gray * value + b * (1 + value);
 	}
 }
 
-
 function rgbToHsv(r: number, g: number, b: number) {
-	(r /= 255), (g /= 255), (b /= 255);
+	((r /= 255), (g /= 255), (b /= 255));
 
 	const max = Math.max(r, g, b),
 		min = Math.min(r, g, b);
@@ -228,31 +226,34 @@ function hsvToRgb(h: number, s: number, v: number) {
 
 	switch (i % 6) {
 		case 0:
-			(r = v), (g = t), (b = p);
+			((r = v), (g = t), (b = p));
 			break;
 		case 1:
-			(r = q), (g = v), (b = p);
+			((r = q), (g = v), (b = p));
 			break;
 		case 2:
-			(r = p), (g = v), (b = t);
+			((r = p), (g = v), (b = t));
 			break;
 		case 3:
-			(r = p), (g = q), (b = v);
+			((r = p), (g = q), (b = v));
 			break;
 		case 4:
-			(r = t), (g = p), (b = v);
+			((r = t), (g = p), (b = v));
 			break;
 		case 5:
-			(r = v), (g = p), (b = q);
+			((r = v), (g = p), (b = q));
 			break;
 	}
 
 	return [r * 255, g * 255, b * 255];
 }
 
-
-
-export function drawImageScaled(context: context2d, img: canvasImage, diff: { x: number, y: number }, type: 'cover' | 'contain') {
+export function drawImageScaled(
+	context: context2d,
+	img: canvasImage,
+	diff: { x: number; y: number },
+	type: 'cover' | 'contain'
+) {
 	const imgRatio = img.height / img.width;
 	const winRatio = 480 / 800;
 	if ((imgRatio < winRatio && type === 'contain') || (imgRatio >= winRatio && type === 'cover')) {
@@ -282,7 +283,12 @@ export function drawNameTag(name: string, context: context2d) {
 	context.fillText(name, 800 - 3, 480 - 3);
 }
 
-export async function doStuff(context: context2d, image: canvasImage, imgData: ImageData, options: DrawingOptions) {
+export async function doStuff(
+	context: context2d,
+	image: canvasImage,
+	imgData: ImageData,
+	options: DrawingOptions
+) {
 	const { fill, overlayName, brightness, saturation, contrastMode, diff, quick = false } = options;
 
 	if (options.clear) {
@@ -293,12 +299,12 @@ export async function doStuff(context: context2d, image: canvasImage, imgData: I
 	drawNameTag(overlayName, context);
 
 	imgData = context.getImageData(0, 0, 800, 480);
-	
+
 	const adjusted = changeBrightness(imgData.data, brightness);
 	changeSaturation(adjusted, saturation == -0.4 ? -1 : saturation);
 	if (!quick) {
 		optimizeForScreen(adjusted, 80);
 	}
-	
+
 	return atkinsonDither(adjusted, palette, 800, 480, contrastMode);
 }

@@ -117,20 +117,20 @@
 							<strong>{frame.frameName}</strong>
 							<span class="muted">ID: {frame.id}</span>
 						</div>
-					<div class="frame-actions">
-						<form method="POST" action="?/createClaimCode" class="inline">
-							<input
-								id={`claimTtlHours-${frame.id}`}
-								type="number"
-								name="ttlHours"
-								min="1"
-								max="720"
-								value="336"
-								title="Gültig (Stunden)"
-							/>
-							<input type="hidden" name="frameId" value={frame.id} />
-							<button type="submit">Claim-Code</button>
-						</form>
+						<div class="frame-actions">
+							<form method="POST" action="?/createClaimCode" class="inline">
+								<input
+									id={`claimTtlHours-${frame.id}`}
+									type="number"
+									name="ttlHours"
+									min="1"
+									max="720"
+									value="336"
+									title="Gültig (Stunden)"
+								/>
+								<input type="hidden" name="frameId" value={frame.id} />
+								<button type="submit">Claim-Code</button>
+							</form>
 							<form method="POST" action="?/createUploadCode" class="inline">
 								<input type="hidden" name="frameId" value={frame.id} />
 								<button type="submit">Upload-Code</button>

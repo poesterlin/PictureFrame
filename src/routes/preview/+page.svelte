@@ -15,7 +15,9 @@
 	let index = 0;
 	let carousel: { goToPrev?: () => void; goToNext?: () => void } | null = null;
 
-	$: frameQuery = data.activeFrameId ? `&frameId=${encodeURIComponent(String(data.activeFrameId))}` : '';
+	$: frameQuery = data.activeFrameId
+		? `&frameId=${encodeURIComponent(String(data.activeFrameId))}`
+		: '';
 	$: previewScopeQuery = data.activeFrameId
 		? `?frameId=${encodeURIComponent(String(data.activeFrameId))}`
 		: '';
@@ -186,7 +188,9 @@
 			</div>
 			<div slot="dots">
 				<div class="toolbar">
-					<pre>{pageCount > 0 ? `${(index + 1).toString().padStart(pageCount.toString().length, '0')}/${pageCount}` : '0/0'}</pre>
+					<pre>{pageCount > 0
+							? `${(index + 1).toString().padStart(pageCount.toString().length, '0')}/${pageCount}`
+							: '0/0'}</pre>
 				</div>
 				<form on:submit|preventDefault={() => showCurrent(index)}>
 					<button type="submit" disabled={busyAction !== ''}>
@@ -195,7 +199,8 @@
 					<button
 						type="button"
 						class:active={getFlags(keys[index]).favorite}
-						on:click={() => setFlagsForCurrent(index, { favorite: !getFlags(keys[index]).favorite })}
+						on:click={() =>
+							setFlagsForCurrent(index, { favorite: !getFlags(keys[index]).favorite })}
 						disabled={busyAction !== ''}
 					>
 						{busyAction === 'favorite'

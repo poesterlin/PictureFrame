@@ -62,7 +62,10 @@ export const actions: Actions = {
 				parallelism: 1
 			});
 
-			await db.update(table.usersTable).set({ passwordHash }).where(eq(table.usersTable.id, existingUser.id));
+			await db
+				.update(table.usersTable)
+				.set({ passwordHash })
+				.where(eq(table.usersTable.id, existingUser.id));
 			await db.delete(table.sessionTable).where(eq(table.sessionTable.userId, existingUser.id));
 
 			return {
