@@ -13,6 +13,11 @@
 	let isProvisioning = false;
 	let connectedDeviceName = '';
 
+	type ProvisionMode = 'ble' | 'serial';
+	let mode: ProvisionMode = navigator.bluetooth ? 'ble' : 'serial';
+
+	$: bleAvailable = !!navigator.bluetooth;
+	$: serialAvailable = typeof navigator !== 'undefined' && 'serial' in navigator;
 	$: selectedFrame = data.frames.find((frame) => frame.id === selectedFrameId);
 
 	type BleContext = {
@@ -46,9 +51,101 @@
 		return { device, server, service } as BleContext;
 	}
 
-	function disconnect(context: BleContext | undefined) {
+	function disconnectBle(context: BleContext | undefined) {
 		if (context?.device.gatt?.connected) {
 			context.device.gatt.disconnect();
+		}
+	}
+
+	async function provisionBle() {
+		const context = await withBleContext();
+		status = 'Übertrage WLAN-Daten...';
+
+		const characteristic = await context.service.getCharacteristic(
+			bleProfile.wifiWriteCharacteristicUuid
+		);
+
+		const encoder = new TextEncoder();
+		const payload = {
+			type: 'wifiProvision',
+			ssid: ssid.trim(),
+			password,
+			authKey: selectedFrame?.authKey
+		};
+		await characteristic.writeValue(encoder.encode(JSON.stringify(payload)));
+		status = `Konfiguration gesendet an ${connectedDeviceName}.`;
+		disconnectBle(context);
+	}
+
+	async function provisionSerial() {
+		if (!('serial' in navigator)) {
+			throw new Error('Web Serial wird von diesem Browser nicht unterstützt.');
+		}
+
+		status = 'Wähle den USB-Port des ESP32...';
+		const port = await (navigator as any).serial.requestPort();
+		connectedDeviceName = 'USB-Serial';
+
+		status = 'Öffne serielle Verbindung...';
+		await port.open({ baudRate: 115200 });
+
+		try {
+			const textEncoder = new TextEncoder();
+			const textDecoder = new TextDecoder();
+			const writer = port.writable.getWriter();
+			const reader = port.readable.getReader();
+
+			const payload = {
+				type: 'wifiProvision',
+				ssid: ssid.trim(),
+				password,
+				authKey: selectedFrame?.authKey
+			};
+			const json = JSON.stringify(payload) + '\n';
+
+			status = 'Übertrage WLAN-Daten...';
+			await writer.write(textEncoder.encode(json));
+
+			const timeout = 10000;
+			const start = Date.now();
+			let ackReceived = false;
+			let buffer = '';
+
+			status = 'Warte auf Bestätigung...';
+
+			while (Date.now() - start < timeout) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				if (value) {
+					buffer += textDecoder.decode(value, { stream: true });
+					const lines = buffer.split('\n');
+					buffer = lines.pop() || '';
+
+					for (const line of lines) {
+						try {
+							const msg = JSON.parse(line);
+							if (msg.type === 'wifiProvision' && msg.status === 'ok') {
+								ackReceived = true;
+								break;
+							}
+						} catch (_) {
+							/* log lines and other non-JSON output */
+						}
+					}
+					if (ackReceived) break;
+				}
+			}
+
+			reader.releaseLock();
+			writer.releaseLock();
+
+			if (ackReceived) {
+				status = 'Konfiguration gesendet und bestätigt. ESP32 startet neu.';
+			} else {
+				status = 'Keine Bestätigung empfangen, aber Daten wurden gesendet.';
+			}
+		} finally {
+			await port.close();
 		}
 	}
 
@@ -66,30 +163,16 @@
 		}
 
 		isProvisioning = true;
-		let context: BleContext | undefined;
-
 		try {
-			context = await withBleContext();
-			status = 'Übertrage WLAN-Daten...';
-
-			const characteristic = await context.service.getCharacteristic(
-				bleProfile.wifiWriteCharacteristicUuid
-			);
-
-			const encoder = new TextEncoder();
-			const payload = {
-				type: 'wifiProvision',
-				ssid: ssid.trim(),
-				password,
-				authKey: selectedFrame.authKey
-			};
-			await characteristic.writeValue(encoder.encode(JSON.stringify(payload)));
-			status = `Konfiguration gesendet an ${connectedDeviceName}.`;
+			if (mode === 'ble') {
+				await provisionBle();
+			} else {
+				await provisionSerial();
+			}
 		} catch (error) {
 			console.error('Provisioning-Fehler:', error);
-			status = 'Konfiguration fehlgeschlagen.';
+			status = `Konfiguration fehlgeschlagen: ${(error as Error).message || 'Unbekannter Fehler'}`;
 		} finally {
-			disconnect(context);
 			isProvisioning = false;
 		}
 	}
@@ -108,6 +191,29 @@
 		<form class="connect-card" on:submit={onProvision}>
 			<h1>WLAN konfigurieren</h1>
 			<p class="subtitle">SSID und Passwort direkt an deinen Frame übertragen.</p>
+
+			<div class="mode-tabs">
+				<button
+					type="button"
+					class="mode-tab"
+					class:active={mode === 'ble'}
+					disabled={!bleAvailable}
+					on:click={() => (mode = 'ble')}
+					title={bleAvailable ? 'Bluetooth' : 'Nicht verfügbar'}
+				>
+					Bluetooth
+				</button>
+				<button
+					type="button"
+					class="mode-tab"
+					class:active={mode === 'serial'}
+					disabled={!serialAvailable}
+					on:click={() => (mode = 'serial')}
+					title={serialAvailable ? 'USB (Web Serial)' : 'Nicht verfügbar'}
+				>
+					USB
+				</button>
+			</div>
 
 			{#if data.isAdmin}
 				<div class="field-row">
@@ -136,7 +242,11 @@
 
 			<div class="actions">
 				<button type="submit" disabled={isProvisioning}>
-					{isProvisioning ? 'Sende...' : 'Über Bluetooth übertragen'}
+					{isProvisioning
+						? 'Sende...'
+						: mode === 'ble'
+							? 'Über Bluetooth übertragen'
+							: 'Über USB übertragen'}
 				</button>
 			</div>
 
@@ -173,6 +283,41 @@
 		margin: 0;
 		font-size: 0.9rem;
 		color: #4b5563;
+	}
+
+	.mode-tabs {
+		display: flex;
+		gap: 0.25rem;
+		border-radius: 8px;
+		background: rgba(17, 24, 39, 0.06);
+		padding: 0.25rem;
+	}
+
+	.mode-tab {
+		flex: 1;
+		padding: 0.4rem 0.6rem;
+		font-family: inherit;
+		font-size: 0.85rem;
+		font-weight: 500;
+		border: none;
+		border-radius: 6px;
+		background: transparent;
+		color: #6b7280;
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+
+	.mode-tab.active {
+		background: #fff;
+		color: #111827;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	}
+
+	.mode-tab:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	.field-row {

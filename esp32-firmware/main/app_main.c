@@ -14,6 +14,7 @@
 #include "frame_api.h"
 #include "frame_fetcher.h"
 #include "frame_ws.h"
+#include "serial_provisioning.h"
 #include "settings_store.h"
 #include "wifi_manager.h"
 
@@ -421,6 +422,7 @@ void app_main(void) {
 	}
 	ESP_ERROR_CHECK(wifi_manager_init() ? ESP_OK : ESP_FAIL);
 	ESP_ERROR_CHECK(ble_provisioning_start(&s_settings, apply_new_wifi_config) ? ESP_OK : ESP_FAIL);
+	serial_provisioning_start(&s_settings, apply_new_wifi_config);
 
 	if (strlen(s_settings.wifi_ssid) == 0) {
 		ESP_LOGW(TAG, "wifi not provisioned yet");
@@ -437,8 +439,9 @@ void app_main(void) {
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
 	}
 
-	// Free up heap by stopping BLE now that WiFi is connected.
+	// Free up heap by stopping BLE and serial provisioning now that WiFi is connected.
 	ble_provisioning_stop();
+	serial_provisioning_stop();
 
 	// Bearer auth wiring for HTTP + WS clients.
 	frame_api_init(FRAME_BASE_URL, s_settings.frame_auth_key);

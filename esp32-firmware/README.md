@@ -6,8 +6,8 @@ This firmware replaces the Raspberry Pi `update-service` runtime.
 
 - Target: ESP32-S3 + 7.3" 7-color panel
 - Transport: WebSocket + HTTPS frame download
-- Provisioning: BLE (`ec00` service, `ec0e` write)
-- Storage: only settings in NVS (Wi-Fi, refresh interval)
+- Provisioning: BLE (`ec00` service, `ec0e` write) or Web Serial over USB-CDC
+- Storage: only settings in NVS (Wi-Fi, refresh interval, auth key)
 - Offline behavior: no frame history, no download queue, no persistent image cache
 
 ## XIAO ESP32-S3 / ESP32-C6 Build Guide
@@ -46,6 +46,21 @@ idf.py build
 idf.py -p /dev/ttyACM0 flash
 ```
 
+### 2b) Create merged binary for web flashing
+
+```bash
+cd esp32-firmware
+esptool.py --chip esp32c6 merge_bin \
+  -o ../static/firmware/merged.bin \
+  --flash_mode dio --flash_size 4MB --flash_freq 80m \
+  0x0 build/bootloader/bootloader.bin \
+  0x8000 build/partition_table/partition-table.bin \
+  0xf000 build/ota_data_initial.bin \
+  0x20000 build/pictureframe_esp32s3.bin
+```
+
+Then bump the version in `../static/firmware/manifest.json`.
+
 Set these values in `menuconfig`:
 
 - `PictureFrame settings -> WebSocket base URL`
@@ -60,6 +75,22 @@ idf.py -p /dev/ttyACM0 monitor
 ```
 
 If your board enumerates as `/dev/ttyUSB0` instead, replace the port accordingly.
+
+### Wi-Fi provisioning
+
+The firmware supports two provisioning methods:
+
+1. **BLE (legacy)** — The ESP32 advertises service `0xec00` with write characteristic `0xec0e`.
+   Send a JSON payload `{"type":"wifiProvision","ssid":"...","password":"...","authKey":"..."}`
+   over BLE and the device saves to NVS then reboots.
+
+2. **Web Serial (USB)** — Available as an alternative on the `/connect` page. Plug the ESP32-C6
+   into USB, switch to the USB tab, and the browser sends the same JSON payload over the
+   built-in USB-CDC serial port at 115200 baud. The device acknowledges with
+   `{"type":"wifiProvision","status":"ok"}` before rebooting.
+
+Both methods run concurrently when Wi-Fi is not configured. Either will trigger the same
+save-and-reboot handler.
 
 ### Troubleshooting: `idf.py` not found
 

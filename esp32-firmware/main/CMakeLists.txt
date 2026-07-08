@@ -8,6 +8,7 @@ idf_component_register(
         "display_driver.c"
         "settings_store.c"
         "ble_provisioning.c"
+        "serial_provisioning.c"
     INCLUDE_DIRS "."
     REQUIRES
         nvs_flash
@@ -16,6 +17,7 @@ idf_component_register(
         esp_netif
         esp_driver_gpio
         esp_driver_spi
+        esp_driver_usb_serial_jtag
         esp-tls
         esp_http_client
         esp_websocket_client
