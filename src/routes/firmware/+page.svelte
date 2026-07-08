@@ -64,25 +64,6 @@
 					</div>
 				</div>
 			</div>
-
-			<details class="info">
-				<summary>Firmware-Datei bereitstellen (Admin)</summary>
-				<p>
-					Platziere die gemerged Firmware als <code>static/firmware/merged.bin</code> und passe die
-					Version in <code>static/firmware/manifest.json</code> an.
-					<br />
-					Merge-Befehl mit esptool:
-				</p>
-				<pre><code
-						>esptool.py --chip esp32c6 merge_bin \
-  -o static/firmware/merged.bin \
-  --flash_mode dio --flash_size 4MB --flash_freq 80m \
-  0x0 build/bootloader/bootloader.bin \
-  0x8000 build/partition_table/partition-table.bin \
-  0xf000 build/ota_data_initial.bin \
-  0x20000 build/pictureframe_esp32s3.bin</code
-					></pre>
-			</details>
 		{/if}
 	</div>
 </section>

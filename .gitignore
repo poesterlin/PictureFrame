@@ -32,6 +32,3 @@ esp32-firmware/managed_components/
 esp32-firmware/sdkconfig.old
 
 frame_data/
-
-# Firmware binaries (manually placed)
-static/firmware/*.bin
