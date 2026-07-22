@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: always
     environment:
       - FRAMES_DIR=/app/data/frames
       - DATABASE_URL=${DATABASE_URL}
