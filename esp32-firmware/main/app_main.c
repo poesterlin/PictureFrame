@@ -33,6 +33,12 @@ static char s_last_display_request_id[64];
 static char s_last_display_artifact[320];
 static int64_t s_last_cursor;
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+static const uint32_t DISPLAY_UPDATE_TASK_STACK_SIZE = 16384;
+#else
+static const uint32_t DISPLAY_UPDATE_TASK_STACK_SIZE = 8192;
+#endif
+
 static bool render_from_artifact_key(const char *artifact_key);
 static void send_hello_request(void);
 static void process_event_envelope(cJSON *envelope);
@@ -42,8 +48,8 @@ static void poll_events_until_idle(uint32_t wait_ms);
 
 static void display_update_task(void *arg) {
 	char *artifact_key = (char *)arg;
-	// frame_ws_stop is only needed if the WS is actually running (steady state).
-	// During boot, it might not be started yet.
+	// Let the WebSocket receive callback return before stopping its client task.
+	vTaskDelay(pdMS_TO_TICKS(50));
 	frame_ws_stop();
 
 	if (artifact_key != NULL) {
@@ -53,9 +59,8 @@ static void display_update_task(void *arg) {
 		free(artifact_key);
 	}
 
-	// Only restart the WS if it was previously initialized.
-	// We handle the initial boot-time WS start in app_main.
 	if (s_last_cursor > 0) {
+		frame_api_ack(s_last_cursor);
 		frame_ws_start();
 	}
 
@@ -81,7 +86,14 @@ static void request_display_update(const char *artifact_key) {
 	memcpy(copy, artifact_key, len + 1);
 
 	s_render_in_progress = true;
-	BaseType_t ok = xTaskCreate(display_update_task, "display_update", 8192, copy, 5, NULL);
+	BaseType_t ok = xTaskCreate(
+		display_update_task,
+		"display_update",
+		DISPLAY_UPDATE_TASK_STACK_SIZE,
+		copy,
+		5,
+		NULL
+	);
 	if (ok != pdPASS) {
 		ESP_LOGE(TAG, "failed to start display update task");
 		free(copy);
@@ -219,10 +231,11 @@ static void process_event_envelope(cJSON *envelope) {
 			s_last_cursor = value;
 		}
 
-		while (s_render_in_progress) {
-			vTaskDelay(pdMS_TO_TICKS(100));
+		// The display task ACKs after rendering while the WebSocket TLS state is
+		// stopped. Waiting here would deadlock esp_websocket_client_stop().
+		if (!s_render_in_progress) {
+			frame_api_ack(value);
 		}
-		frame_api_ack(value);
 	}
 }
 

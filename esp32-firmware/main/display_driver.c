@@ -293,7 +293,7 @@ static bool epd_init_sequence_once(void) {
 		return false;
 	}
 	if (!epd_send_command(0x06) || !epd_send_data_byte(0x6F) || !epd_send_data_byte(0x1F) ||
-		!epd_send_data_byte(0x16) || !epd_send_data_byte(0x25)) {
+		!epd_send_data_byte(0x1F) || !epd_send_data_byte(0x22)) {
 		return false;
 	}
 	if (!epd_send_command(0x08) || !epd_send_data_byte(0x6F) || !epd_send_data_byte(0x1F) ||
@@ -303,7 +303,7 @@ static bool epd_init_sequence_once(void) {
 	if (!epd_send_command(0x13) || !epd_send_data_byte(0x00) || !epd_send_data_byte(0x04)) {
 		return false;
 	}
-	if (!epd_send_command(0x30) || !epd_send_data_byte(0x02)) {
+	if (!epd_send_command(0x30) || !epd_send_data_byte(0x3C)) {
 		return false;
 	}
 	if (!epd_send_command(0x41) || !epd_send_data_byte(0x00)) {
@@ -481,8 +481,8 @@ bool display_driver_init(void) {
 	const gpio_config_t in_cfg = {
 		.pin_bit_mask = (1ULL << PIN_BUSY),
 		.mode = GPIO_MODE_INPUT,
-		// Some Waveshare-compatible boards expose BUSY as open-drain and require a pull-up.
-		.pull_up_en = GPIO_PULLUP_ENABLE,
+		// The Seeed breakout routes the panel's actively driven BUSY signal directly.
+		.pull_up_en = GPIO_PULLUP_DISABLE,
 		.pull_down_en = GPIO_PULLDOWN_DISABLE,
 		.intr_type = GPIO_INTR_DISABLE
 	};

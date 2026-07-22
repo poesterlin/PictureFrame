@@ -16,6 +16,12 @@ static ws_connected_handler_t s_connected_handler;
 static char s_ws_url[320];
 static char s_ws_headers[256];
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+static const int WS_TASK_STACK_SIZE = 16384;
+#else
+static const int WS_TASK_STACK_SIZE = 4096;
+#endif
+
 static void ws_event_handler(
 	void *handler_args,
 	esp_event_base_t base,
@@ -97,8 +103,8 @@ bool frame_ws_init(
 		.headers = (s_ws_headers[0] != '\0') ? s_ws_headers : NULL,
 		.reconnect_timeout_ms = 20000,
 		.network_timeout_ms = 20000,
-		// Explicitly set a smaller task stack for the WS client if needed,
-		// but default is usually 4096.
+		// Xtensa TLS certificate processing overflows the client's 4 KiB default.
+		.task_stack = WS_TASK_STACK_SIZE
 	};
 	s_client = esp_websocket_client_init(&websocket_cfg);
 	if (s_client == NULL) {
