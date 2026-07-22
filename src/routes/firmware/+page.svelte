@@ -33,7 +33,7 @@
 				<div class="step">
 					<div class="step-num">1</div>
 					<div class="step-body">
-						<h3>ESP32-C6 per USB verbinden</h3>
+						<h3>ESP32 per USB verbinden</h3>
 						<p>Schließe den Frame mit einem USB-C Kabel an deinen Computer an.</p>
 					</div>
 				</div>

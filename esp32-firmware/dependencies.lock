@@ -27,5 +27,5 @@ direct_dependencies:
 - espressif/cjson
 - espressif/esp_websocket_client
 manifest_hash: a8e0b94b060c7389b281c9f454ec45f2822095eec1d584206129578ee9121840
-target: esp32c6
+target: esp32s3
 version: 3.0.0

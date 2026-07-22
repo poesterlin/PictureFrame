@@ -31,19 +31,31 @@ static const uint16_t PANEL_WIDTH = 800;
 static const uint16_t PANEL_HEIGHT = 480;
 static const size_t PANEL_BUFFER_SIZE = (PANEL_WIDTH / 2) * PANEL_HEIGHT;
 
-// XIAO ESP32-C6 wiring (silkscreen label -> actual GPIO):
-//   RST  D0  -> GPIO0
-//   CS   D1  -> GPIO1
-//   DC   D3  -> GPIO21
-//   BUSY D5  -> GPIO23
-//   SCK  D8  -> GPIO19
-//   MOSI D10 -> GPIO18
+// XIAO board wiring (silkscreen label -> actual GPIO):
+// Same physical silkscreen labels on both boards, different GPIOs per chip.
+//   RST  D0
+//   CS   D1
+//   DC   D3
+//   BUSY D5
+//   SCK  D8
+//   MOSI D10
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+static const gpio_num_t PIN_SCLK = GPIO_NUM_7;
+static const gpio_num_t PIN_MOSI = GPIO_NUM_9;
+static const gpio_num_t PIN_CS = GPIO_NUM_2;
+static const gpio_num_t PIN_DC = GPIO_NUM_4;
+static const gpio_num_t PIN_RST = GPIO_NUM_1;
+static const gpio_num_t PIN_BUSY = GPIO_NUM_6;
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
 static const gpio_num_t PIN_SCLK = GPIO_NUM_19;
 static const gpio_num_t PIN_MOSI = GPIO_NUM_18;
 static const gpio_num_t PIN_CS = GPIO_NUM_1;
 static const gpio_num_t PIN_DC = GPIO_NUM_21;
 static const gpio_num_t PIN_RST = GPIO_NUM_0;
 static const gpio_num_t PIN_BUSY = GPIO_NUM_23;
+#else
+#error "Unsupported ESP32 target"
+#endif
 
 static spi_device_handle_t s_spi;
 static bool s_bus_ready;

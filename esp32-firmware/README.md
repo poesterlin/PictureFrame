@@ -1,35 +1,59 @@
-# ESP32-S3 Firmware
+# ESP32 Firmware
 
 This firmware replaces the Raspberry Pi `update-service` runtime.
 
 ## Scope
 
-- Target: ESP32-S3 + 7.3" 7-color panel
+- Target: ESP32-C6 or ESP32-S3 + 7.3" 7-color panel
 - Transport: WebSocket + HTTPS frame download
 - Provisioning: BLE (`ec00` service, `ec0e` write) or Web Serial over USB-CDC
 - Storage: only settings in NVS (Wi-Fi, refresh interval, auth key)
 - Offline behavior: no frame history, no download queue, no persistent image cache
 
-## XIAO ESP32-S3 / ESP32-C6 Build Guide
+## XIAO ESP32-C6 / ESP32-S3 Build Guide
+
+Both XIAO form-factor boards (ESP32-C6 and ESP32-S3) are supported using the same
+silkscreen labels (D0-D10). Wire once; the firmware selects the correct GPIO
+mapping at compile time based on `CONFIG_IDF_TARGET`.
 
 ### 1) Wire the e-paper module
 
-Current wiring for the XIAO ESP32-C6 e-paper breakout (silkscreen label -> ESP32 GPIO):
+Use the same physical wiring for both boards (silkscreen label wiring):
 
 - `VCC` -> `3V3` (or module-required supply voltage)
 - `GND` -> `GND`
-- `SCLK` -> `D8` (GPIO19)
-- `DIN` -> `D10` (GPIO18)
-- `CS` -> `D1` (GPIO1)
-- `DC` -> `D3` (GPIO21)
-- `RST` -> `D0` (GPIO0)
-- `BUSY` -> `D5` (GPIO23)
+- `SCLK` -> `D8`
+- `DIN` -> `D10`
+- `CS` -> `D1`
+- `DC` -> `D3`
+- `RST` -> `D0`
+- `BUSY` -> `D5`
 
-Use the display/HAT in **4-line SPI** mode. The legacy Raspberry Pi driver uses separate SPI data plus `CS`, `DC`, `RST`, and `BUSY` control lines; 3-line SPI is not compatible with this firmware wiring.
+The firmware maps these to the correct GPIO at compile time:
 
-Important: on XIAO-style boards, printed pin names like `D7`, `D8`, etc. are not always the same thing as ESP-IDF `GPIO_NUM_7`, `GPIO_NUM_8`, etc. Wire to the actual ESP32-S3 GPIO numbers used in `main/display_driver.c`, or update those constants to match the physical pins you used.
+| Silkscreen | Signal | ESP32-C6 GPIO | ESP32-S3 GPIO |
+|------------|--------|---------------|---------------|
+| D0         | RST    | 0             | 1             |
+| D1         | CS     | 1             | 2             |
+| D3         | DC     | 21            | 4             |
+| D5         | BUSY   | 23            | 6             |
+| D8         | SCK    | 19            | 7             |
+| D10        | MOSI   | 18            | 9             |
 
-The firmware renders a checkerboard during startup before Wi-Fi provisioning. If the serial monitor logs `display initialized for Waveshare 7.3in 7-color` and `rendered offline checkerboard` but the panel does not change, suspect power, SPI/control wiring, or pin-number mismatch before network/protocol issues.
+Use the display/HAT in **4-line SPI** mode. The legacy Raspberry Pi driver uses
+separate SPI data plus `CS`, `DC`, `RST`, and `BUSY` control lines; 3-line SPI
+is not compatible with this firmware wiring.
+
+Important: on XIAO-style boards, printed pin names like `D7`, `D8`, etc. are
+not always the same thing as ESP-IDF `GPIO_NUM_7`, `GPIO_NUM_8`, etc. The
+firmware handles this automatically per target. If you use a different board
+layout, update the pin constants in `main/display_driver.c`.
+
+The firmware renders a checkerboard during startup before Wi-Fi provisioning.
+If the serial monitor logs `display initialized for Waveshare 7.3in 7-color`
+and `rendered offline checkerboard` but the panel does not change, suspect
+power, SPI/control wiring, or pin-number mismatch before network/protocol
+issues.
 
 ### 2) Build and flash
 
@@ -38,28 +62,86 @@ The firmware renders a checkerboard during startup before Wi-Fi provisioning. If
 . ~/esp/esp-idf/export.sh
 
 cd esp32-firmware
-idf.py set-target esp32s3
-# or, for the current ESP32-C6 board:
-idf.py set-target esp32c6
+
+# Choose your target:
+idf.py set-target esp32c6   # or esp32s3
+
+# Configure (one-time or after switching targets):
 idf.py menuconfig
+
 idf.py build
 idf.py -p /dev/ttyACM0 flash
 ```
 
-### 2b) Create merged binary for web flashing
+### 2b) Create merged binaries for web flashing
+
+The web flasher at `/connect` serves firmware from `static/firmware/`. Build
+both targets and merge each into a single flashable binary.
+
+**Full publishing workflow:**
 
 ```bash
+# 1) Source ESP-IDF
+. ~/esp/esp-idf/export.sh
+```
+
+```bash
+# 2) Build and merge for ESP32-C6
 cd esp32-firmware
-esptool.py --chip esp32c6 merge_bin \
-  -o ../static/firmware/merged.bin \
-  --flash_mode dio --flash_size 4MB --flash_freq 80m \
+idf.py set-target esp32c6 && idf.py build
+esptool --chip esp32c6 merge-bin \
+  -o ../static/firmware/merged_c6.bin \
+  --flash-mode dio --flash-size 4MB --flash-freq 80m \
   0x0 build/bootloader/bootloader.bin \
   0x8000 build/partition_table/partition-table.bin \
   0xf000 build/ota_data_initial.bin \
-  0x20000 build/pictureframe_esp32s3.bin
+  0x20000 build/pictureframe.bin
 ```
 
-Then bump the version in `../static/firmware/manifest.json`.
+```bash
+# 3) Build and merge for ESP32-S3
+idf.py set-target esp32s3 && idf.py build
+esptool --chip esp32s3 merge-bin \
+  -o ../static/firmware/merged_s3.bin \
+  --flash-mode dio --flash-size 8MB --flash-freq 80m \
+  0x0 build/bootloader/bootloader.bin \
+  0x8000 build/partition_table/partition-table.bin \
+  0xf000 build/ota_data_initial.bin \
+  0x20000 build/pictureframe.bin
+```
+
+```bash
+# 4) Bump version and verify
+# Edit ../static/firmware/manifest.json — increment "version"
+ls -lh ../static/firmware/
+```
+
+**Output structure (`static/firmware/`):**
+
+```
+static/firmware/
+├── manifest.json      # version + chipFamily entries
+├── merged_c6.bin      # ESP32-C6 combined binary
+└── merged_s3.bin      # ESP32-S3 combined binary
+```
+
+The `manifest.json` lists both chips so the browser-based flasher
+auto-detects and picks the correct binary:
+
+```json
+{
+  "name": "PictureFrame",
+  "version": "0.3.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    { "chipFamily": "ESP32-C6", "parts": [{ "path": "/firmware/merged_c6.bin", "offset": 0 }] },
+    { "chipFamily": "ESP32-S3", "parts": [{ "path": "/firmware/merged_s3.bin", "offset": 0 }] }
+  ]
+}
+```
+
+> **Important:** When switching targets, ESP-IDF regenerates `sdkconfig`. If
+> you see stale config errors, run `idf.py fullclean` before re-building.
 
 Set these values in `menuconfig`:
 
@@ -84,7 +166,7 @@ The firmware supports two provisioning methods:
    Send a JSON payload `{"type":"wifiProvision","ssid":"...","password":"...","authKey":"..."}`
    over BLE and the device saves to NVS then reboots.
 
-2. **Web Serial (USB)** — Available as an alternative on the `/connect` page. Plug the ESP32-C6
+2. **Web Serial (USB)** — Available as an alternative on the `/connect` page. Plug the ESP32
    into USB, switch to the USB tab, and the browser sends the same JSON payload over the
    built-in USB-CDC serial port at 115200 baud. The device acknowledges with
    `{"type":"wifiProvision","status":"ok"}` before rebooting.

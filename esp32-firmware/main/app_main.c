@@ -257,8 +257,7 @@ static void apply_snapshot_payload(cJSON *snapshot) {
 
 		// If a display update was triggered above, wait for its handshake
 		// to finish (or the whole task) before we perform our ACK POST.
-		// On the ESP32-C6, concurrent TLS handshakes can exhaust PSA
-		// crypto memory.
+		// Concurrent TLS handshakes can exhaust PSA crypto memory.
 		while (s_render_in_progress) {
 			vTaskDelay(pdMS_TO_TICKS(100));
 		}
@@ -380,7 +379,7 @@ static void heartbeat_task(void *arg) {
 		// Pause the WS so the TLS handshake for our HTTPS calls has enough
 		// heap. The mbedtls fragment buffers are also tuned down via sdkconfig
 		// to make this less critical, but the belt-and-suspenders approach
-		// keeps things robust on the ESP32-C6.
+		// keeps things robust.
 		frame_ws_stop();
 
 		char body[128];
