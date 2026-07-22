@@ -4,8 +4,13 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cJSON.h"
 #include "esp_log.h"
+
+static const char *TAG = "ble_provisioning";
+
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+
+#include "cJSON.h"
 #include "host/ble_gap.h"
 #include "host/ble_gatt.h"
 #include "host/ble_hs_adv.h"
@@ -16,7 +21,6 @@
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 
-static const char *TAG = "ble_provisioning";
 static frame_settings_t *s_settings;
 static ble_wifi_update_handler_t s_handler;
 static uint8_t s_own_addr_type;
@@ -223,3 +227,14 @@ void ble_provisioning_stop(void) {
 	nimble_port_deinit();
 	ESP_LOGI(TAG, "BLE provisioning stopped");
 }
+
+#else // !CONFIG_IDF_TARGET_ESP32C6
+
+bool ble_provisioning_start(frame_settings_t *settings, ble_wifi_update_handler_t on_update) {
+	ESP_LOGI(TAG, "BLE provisioning not available on this target (USB-CDC only)");
+	return true;
+}
+
+void ble_provisioning_stop(void) {}
+
+#endif
