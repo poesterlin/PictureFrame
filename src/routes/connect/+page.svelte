@@ -8,6 +8,7 @@
 
 	let ssid = '';
 	let password = '';
+	let showPassword = false;
 	let selectedFrameId: number | '' = data.frames[0]?.id ?? '';
 	let status = '';
 	let isProvisioning = false;
@@ -233,11 +234,15 @@
 			<div class="field-row">
 				<label for="password">Passwort</label>
 				<input
-					type="password"
+					type={showPassword ? 'text' : 'password'}
 					id="password"
 					bind:value={password}
 					autocomplete="current-password"
 				/>
+				<label class="password-visibility">
+					<input type="checkbox" bind:checked={showPassword} />
+					Passwort anzeigen
+				</label>
 			</div>
 
 			<div class="actions">
@@ -328,6 +333,21 @@
 	label {
 		font-size: 0.85rem;
 		font-weight: 600;
+	}
+
+	.password-visibility {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		width: fit-content;
+		font-weight: 400;
+		cursor: pointer;
+	}
+
+	.password-visibility input {
+		width: 1rem;
+		height: 1rem;
+		padding: 0;
 	}
 
 	input,
