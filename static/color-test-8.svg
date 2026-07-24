@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480">
+	<rect width="800" height="60" y="0" fill="#000000"/>
+	<rect width="800" height="60" y="60" fill="#ffffff"/>
+	<rect width="800" height="60" y="120" fill="#00ff00"/>
+	<rect width="800" height="60" y="180" fill="#0000ff"/>
+	<rect width="800" height="60" y="240" fill="#ff0000"/>
+	<rect width="800" height="60" y="300" fill="#ffff00"/>
+	<rect width="800" height="60" y="360" fill="#ff8000"/>
+	<rect width="800" height="60" y="420" fill="#645174"/>
+
+	<g font-family="DejaVu Sans, sans-serif" font-size="24" font-weight="bold" text-anchor="end">
+		<text x="785" y="39" fill="#ffffff">0 - Black  #000000</text>
+		<text x="785" y="99" fill="#000000">1 - White  #FFFFFF</text>
+		<text x="785" y="159" fill="#000000">2 - Green  #00FF00</text>
+		<text x="785" y="219" fill="#ffffff">3 - Blue  #0000FF</text>
+		<text x="785" y="279" fill="#ffffff">4 - Red  #FF0000</text>
+		<text x="785" y="339" fill="#000000">5 - Yellow  #FFFF00</text>
+		<text x="785" y="399" fill="#000000">6 - Orange  #FF8000</text>
+		<text x="785" y="459" fill="#ffffff">7 - Purple  #645174</text>
+	</g>
+</svg>
