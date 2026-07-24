@@ -22,10 +22,11 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 6.1.0
+    version: 6.0.2
 direct_dependencies:
 - espressif/cjson
 - espressif/esp_websocket_client
-manifest_hash: a8e0b94b060c7389b281c9f454ec45f2822095eec1d584206129578ee9121840
-target: esp32c6
+- idf
+manifest_hash: 67741b18c856699be299e8d1d5822c9e488c546f1cb648a1a00929d36ac150a9
+target: esp32s3
 version: 3.0.0

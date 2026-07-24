@@ -189,7 +189,7 @@ not be committed (it's in `.gitignore`).
 | File | Target | Key differences |
 |---|---|---|
 | `sdkconfig.esp32c6` | ESP32-C6 | RISC-V, NimBLE BLE, 3584-byte main stack |
-| `sdkconfig.esp32s3` | ESP32-S3 | Xtensa, USB-CDC only (no BLE), 8192-byte main stack |
+| `sdkconfig.esp32s3` | ESP32-S3 | Xtensa, USB-CDC only (no BLE), 16384-byte main stack |
 
 When making persistent config changes, edit the template file, then re-run
 `switch-target.sh` to apply them.
