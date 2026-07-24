@@ -378,16 +378,18 @@ static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t wid
 	return true;
 }
 
-static uint8_t normalize_color(uint8_t value) {
-	// Keep compatibility with old GUI_ReadBmp_RGB_7Color behavior.
-	return value >= 7 ? 1 : value;
+static uint8_t panel_color_from_pf7a(uint8_t value) {
+	// PF7A palette: black, white, green, blue, red, yellow, orange, purple.
+	// Waveshare panel nibbles: black, white, yellow, red, reserved, blue, green, orange.
+	static const uint8_t panel_colors[] = {0, 1, 6, 5, 3, 2, 7, 4};
+	return value < sizeof(panel_colors) ? panel_colors[value] : 1;
 }
 
 static bool pf7a_stream_write_pixel(pf7a_stream_t *state, size_t pixel_index, uint8_t value) {
 	if (pixel_index >= (size_t)PANEL_WIDTH * PANEL_HEIGHT) {
 		return false;
 	}
-	uint8_t color = normalize_color(value);
+	uint8_t color = panel_color_from_pf7a(value);
 	uint8_t *packed = &s_panel_buffer[pixel_index / 2];
 	if ((pixel_index & 1) == 0) {
 		*packed = (uint8_t)((color << 4) | (*packed & 0x0F));
@@ -568,8 +570,8 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		size_t src_row = (size_t)y * width;
 		size_t dst_row = (size_t)y * (width / 2);
 		for (uint16_t x = 0; x < width; x += 2) {
-			uint8_t left = normalize_color(pixels[src_row + x]);
-			uint8_t right = normalize_color(pixels[src_row + x + 1]);
+			uint8_t left = panel_color_from_pf7a(pixels[src_row + x]);
+			uint8_t right = panel_color_from_pf7a(pixels[src_row + x + 1]);
 			s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
 		}
 	}
@@ -712,7 +714,8 @@ bool display_driver_render_solid_test(uint8_t color) {
 		ESP_LOGW(TAG, "solid test skipped (display not ready)");
 		return false;
 	}
-	uint8_t packed = (uint8_t)((normalize_color(color) << 4) | normalize_color(color));
+	uint8_t panel_color = panel_color_from_pf7a(color);
+	uint8_t packed = (uint8_t)((panel_color << 4) | panel_color);
 	memset(s_panel_buffer, packed, PANEL_BUFFER_SIZE);
 	if (!epd_display_packed_buffer(s_panel_buffer, PANEL_WIDTH, PANEL_HEIGHT)) {
 		return false;

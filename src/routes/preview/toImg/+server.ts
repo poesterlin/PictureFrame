@@ -21,7 +21,8 @@ const palette = [
 	toHex(0, 0, 255),
 	toHex(255, 0, 0),
 	toHex(255, 255, 0),
-	toHex(255, 128, 0)
+	toHex(255, 128, 0),
+	toHex(100, 81, 116)
 ];
 
 function toHex(r: number, g: number, b: number) {

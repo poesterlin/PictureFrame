@@ -149,7 +149,8 @@ async function dither(input: Uint8Array) {
 		[0, 0, 255],
 		[255, 0, 0],
 		[255, 255, 0],
-		[255, 128, 0]
+		[255, 128, 0],
+		[100, 81, 116]
 	] as color[];
 
 	return atkinsonDither(inputRaw, palette, 800, 480);

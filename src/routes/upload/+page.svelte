@@ -303,9 +303,9 @@
 	>
 		<div id="preview">
 			<div id="frame-bottom">
-				Der Bilderrahmen benutzt ein Display mit <b>nur 7 Farben</b>
+				Der Bilderrahmen benutzt ein Display mit <b>nur 8 Farben</b>
 				<span id="colors">
-					{#each ['white', 'black', 'red', 'green', 'blue', 'orange', 'yellow'] as col}
+					{#each ['white', 'black', 'red', 'green', 'blue', 'orange', 'yellow', 'purple'] as col}
 						<span class="color" id={col} />
 					{/each}
 				</span>
@@ -750,6 +750,10 @@
 	}
 	#orange {
 		background-color: orange;
+	}
+
+	#purple {
+		background-color: #645174;
 	}
 	#yellow {
 		background-color: yellow;

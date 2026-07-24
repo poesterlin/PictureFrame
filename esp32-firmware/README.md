@@ -265,7 +265,7 @@ The `artifactKey` resolves to a `.pf7a` binary:
 - bytes `0..3`: magic `PF7A`
 - bytes `4..5`: width (LE)
 - bytes `6..7`: height (LE)
-- bytes `8..end`: one palette index (0-6) per pixel
+- bytes `8..end`: one palette index (0-7) per pixel
 
 ## Pilot Validation Checklist
 

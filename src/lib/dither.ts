@@ -8,7 +8,8 @@ export const palette: color[] = [
 	[0, 255, 0],
 	[0, 0, 255],
 	[255, 255, 0],
-	[255, 128, 0]
+	[255, 128, 0],
+	[100, 81, 116]
 ];
 
 export interface DrawingOptions {

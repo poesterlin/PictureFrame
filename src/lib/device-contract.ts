@@ -9,7 +9,7 @@ export const frameFormat = {
 	magic: 'PF7A',
 	width: 800,
 	height: 480,
-	paletteSize: 7
+	paletteSize: 8
 } as const;
 
 export interface HelloMessage {
