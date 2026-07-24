@@ -23,59 +23,6 @@ export interface DrawingOptions {
 	clear: boolean;
 }
 
-export function optimizeForScreen(data: Uint8ClampedArray, threshold: number) {
-	let totalReds = 0;
-
-	for (let x = 0; x < 800; x += 1) {
-		let reds = 0;
-		for (let y = 0; y < 480; y += 1) {
-			const pix = byteIdx(x, y);
-
-			if (data[pix] > 200 && data[pix + 1] > 120 && data[pix + 2] < 200) {
-				reds += 1;
-			}
-
-			if (reds > threshold) {
-				for (let y1 = 0; y1 + y < 480; y1 += 1) {
-					const absY = y1 + y;
-					const i = byteIdx(x, absY);
-
-					const r = data[i];
-					const g = data[i + 1];
-					const b = data[i + 2];
-
-					if (r > 120 && g > 80 && g < 200 && b < 200) {
-						reds += 1;
-						const value = Math.max(-y1 / 350, -0.5);
-						const gray = 0.2989 * r + 0.587 * g + 0.114 * b; // weights from CCIR 601 spec
-
-						data[i] = -gray * value + r * (1 + value) + 15;
-						data[i + 1] = -gray * value + g * (1 + value) + 15;
-						data[i + 2] = -gray * -value + b * (1 + -value) + 15;
-					}
-				}
-				totalReds += reds;
-				break;
-			}
-		}
-	}
-
-	if (totalReds / (480 * 800) < 0.25) {
-		return;
-	}
-
-	const cutoff = 0.1;
-	for (let i = 0; i < data.length; i += 4) {
-		const [hue, saturation, lightness] = rgbToHsv(data[i], data[i + 1], data[i + 2]);
-		const inRange = hue < cutoff;
-		const [r, g, b] = hsvToRgb(hue, inRange ? saturation * 1.25 : saturation, lightness);
-
-		data[i] = r;
-		data[i + 1] = g;
-		data[i + 2] = b;
-	}
-}
-
 function byteIdx(x: number, y: number) {
 	return 4 * x + 4 * y * 800;
 }
@@ -181,73 +128,6 @@ export function changeSaturation(data: Uint8ClampedArray, value: number) {
 	}
 }
 
-function rgbToHsv(r: number, g: number, b: number) {
-	((r /= 255), (g /= 255), (b /= 255));
-
-	const max = Math.max(r, g, b),
-		min = Math.min(r, g, b);
-	let h = 0;
-	const v = max;
-
-	const d = max - min;
-	const s = max == 0 ? 0 : d / max;
-
-	if (max == min) {
-		h = 0;
-	} else {
-		switch (max) {
-			case r:
-				h = (g - b) / d + (g < b ? 6 : 0);
-				break;
-			case g:
-				h = (b - r) / d + 2;
-				break;
-			case b:
-				h = (r - g) / d + 4;
-				break;
-		}
-
-		h /= 6;
-	}
-
-	return [h, s, v];
-}
-
-function hsvToRgb(h: number, s: number, v: number) {
-	let r = 0,
-		g = 0,
-		b = 0;
-
-	const i = Math.floor(h * 6);
-	const f = h * 6 - i;
-	const p = v * (1 - s);
-	const q = v * (1 - f * s);
-	const t = v * (1 - (1 - f) * s);
-
-	switch (i % 6) {
-		case 0:
-			((r = v), (g = t), (b = p));
-			break;
-		case 1:
-			((r = q), (g = v), (b = p));
-			break;
-		case 2:
-			((r = p), (g = v), (b = t));
-			break;
-		case 3:
-			((r = p), (g = q), (b = v));
-			break;
-		case 4:
-			((r = t), (g = p), (b = v));
-			break;
-		case 5:
-			((r = v), (g = p), (b = q));
-			break;
-	}
-
-	return [r * 255, g * 255, b * 255];
-}
-
 export function drawImageScaled(
 	context: context2d,
 	img: canvasImage,
@@ -289,7 +169,7 @@ export async function doStuff(
 	imgData: ImageData,
 	options: DrawingOptions
 ) {
-	const { fill, overlayName, brightness, saturation, contrastMode, diff, quick = false } = options;
+	const { fill, overlayName, brightness, saturation, contrastMode, diff } = options;
 
 	if (options.clear) {
 		context.clearRect(0, 0, 800, 480);
@@ -302,9 +182,5 @@ export async function doStuff(
 
 	const adjusted = changeBrightness(imgData.data, brightness);
 	changeSaturation(adjusted, saturation == -0.4 ? -1 : saturation);
-	if (!quick) {
-		optimizeForScreen(adjusted, 80);
-	}
-
 	return atkinsonDither(adjusted, palette, 800, 480, contrastMode);
 }
