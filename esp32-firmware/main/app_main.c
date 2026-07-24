@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "cJSON.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -25,6 +26,9 @@ static const char *WS_BASE_URL = CONFIG_FRAME_WS_BASE_URL;
 static const char *FRAME_BASE_URL = CONFIG_FRAME_ASSET_BASE_URL;
 static const char *FRAME_AUTH_KEY_FALLBACK = CONFIG_FRAME_AUTH_KEY;
 static const int WIFI_READY_WAIT_MS = 60000;
+// Give up waiting after this many rounds and do what a human would do: press
+// reset. A fresh boot repeatedly proved to recover a stuck association.
+static const int WIFI_READY_MAX_WAIT_ROUNDS = 5;
 // Heartbeat cadence is fixed; image rotation cadence is decided server-side.
 static const uint32_t HEARTBEAT_INTERVAL_SECONDS = 60;
 
@@ -46,11 +50,25 @@ static void process_message(cJSON *message);
 static void apply_snapshot_payload(cJSON *snapshot);
 static void poll_events_until_idle(uint32_t wait_ms);
 
+// The 192 KiB panel buffer leaves little heap for task stacks and TLS
+// sessions (~35 KiB each). Log the numbers while hunting down OOM failures.
+static void log_heap_state(const char *where) {
+	ESP_LOGI(
+		TAG,
+		"heap[%s]: free=%u min=%u largest_block=%u",
+		where,
+		(unsigned)esp_get_free_heap_size(),
+		(unsigned)esp_get_minimum_free_heap_size(),
+		(unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)
+	);
+}
+
 static void display_update_task(void *arg) {
 	char *artifact_key = (char *)arg;
 	// Let the WebSocket receive callback return before stopping its client task.
 	vTaskDelay(pdMS_TO_TICKS(50));
 	frame_ws_stop();
+	log_heap_state("display_task_start");
 
 	if (artifact_key != NULL) {
 		if (!render_from_artifact_key(artifact_key)) {
@@ -58,6 +76,7 @@ static void display_update_task(void *arg) {
 		}
 		free(artifact_key);
 	}
+	log_heap_state("display_task_end");
 
 	if (s_last_cursor > 0) {
 		frame_api_ack(s_last_cursor);
@@ -86,6 +105,7 @@ static void request_display_update(const char *artifact_key) {
 	memcpy(copy, artifact_key, len + 1);
 
 	s_render_in_progress = true;
+	log_heap_state("before_display_task_create");
 	BaseType_t ok = xTaskCreate(
 		display_update_task,
 		"display_update",
@@ -96,6 +116,7 @@ static void request_display_update(const char *artifact_key) {
 	);
 	if (ok != pdPASS) {
 		ESP_LOGE(TAG, "failed to start display update task");
+		log_heap_state("display_task_create_failed");
 		free(copy);
 		s_render_in_progress = false;
 		return;
@@ -389,6 +410,7 @@ static void heartbeat_task(void *arg) {
 			continue;
 		}
 
+		log_heap_state("heartbeat");
 		// Pause the WS so the TLS handshake for our HTTPS calls has enough
 		// heap. The mbedtls fragment buffers are also tuned down via sdkconfig
 		// to make this less critical, but the belt-and-suspenders approach
@@ -447,7 +469,18 @@ void app_main(void) {
 	}
 
 	ESP_ERROR_CHECK(wifi_manager_connect(s_settings.wifi_ssid, s_settings.wifi_password) ? ESP_OK : ESP_FAIL);
+	int wifi_wait_rounds = 0;
 	while (!wifi_manager_wait_until_ready(WIFI_READY_WAIT_MS)) {
+		wifi_wait_rounds++;
+		if (wifi_wait_rounds >= WIFI_READY_MAX_WAIT_ROUNDS) {
+			ESP_LOGE(
+				TAG,
+				"wifi not ready after %d minutes, restarting",
+				WIFI_READY_WAIT_MS * wifi_wait_rounds / 60000
+			);
+			vTaskDelay(pdMS_TO_TICKS(250));
+			esp_restart();
+		}
 		ESP_LOGW(TAG, "wifi not ready after %ds, still waiting", WIFI_READY_WAIT_MS / 1000);
 	}
 
@@ -468,5 +501,7 @@ void app_main(void) {
 	ESP_ERROR_CHECK(frame_ws_start() ? ESP_OK : ESP_FAIL);
 	ESP_LOGI(TAG, "connected to websocket");
 
-	xTaskCreate(heartbeat_task, "heartbeat_task", 4096, NULL, 5, NULL);
+	// Needs a generous stack: the TLS error path after a failed connect
+	// overflowed 4096 bytes and crashed the task.
+	xTaskCreate(heartbeat_task, "heartbeat_task", 8192, NULL, 5, NULL);
 }

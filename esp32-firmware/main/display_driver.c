@@ -9,7 +9,6 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -59,9 +58,19 @@ static const gpio_num_t PIN_BUSY = GPIO_NUM_23;
 
 static spi_device_handle_t s_spi;
 static bool s_bus_ready;
-static uint8_t *s_panel_buffer;
 static int s_busy_idle_level = 1;
 static bool s_use_timed_busy_fallback = false;
+
+// The panel consumes a frame row by row (400 packed bytes per row), so rows
+// are streamed straight to it instead of staging the full 192 KiB frame in
+// RAM. The old full-frame buffer left too little heap for TLS sessions and
+// task stacks, which crashed renders and heartbeats with out-of-memory
+// errors.
+enum { PANEL_ROW_BYTES = 400 }; // PANEL_WIDTH / 2
+static uint8_t s_row_buffer[PANEL_ROW_BYTES];
+static size_t s_row_fill;
+static uint16_t s_rows_sent;
+static bool s_frame_active;
 
 static bool epd_wait_busy_idle_level(void);
 
@@ -71,6 +80,7 @@ typedef struct {
 	size_t pixels_written;
 	uint16_t width;
 	uint16_t height;
+	uint8_t pending_nibble;
 	bool header_ok;
 	bool failed;
 } pf7a_stream_t;
@@ -352,7 +362,11 @@ static bool epd_init_sequence(void) {
 	return epd_init_sequence_once();
 }
 
-static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t width, uint16_t height) {
+// Starts a frame transfer: panel init + start-of-data command. Rows are then
+// pushed with epd_feed_packed_byte() as they become available, and the panel
+// is refreshed with epd_end_frame(). An aborted frame never reaches the
+// refresh command, so the previous image simply stays on the panel.
+static bool epd_begin_frame(void) {
 	if (!epd_init_sequence()) {
 		ESP_LOGE(TAG, "panel init failed before display");
 		return false;
@@ -361,21 +375,67 @@ static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t wid
 		ESP_LOGE(TAG, "failed to start frame write");
 		return false;
 	}
-	for (uint16_t row = 0; row < height; row++) {
-		const uint8_t *row_ptr = packed_buffer + ((size_t)row * (width / 2));
-		if (!epd_send_data_buffer(row_ptr, width / 2)) {
-			ESP_LOGE(TAG, "failed writing frame row %u", (unsigned)row);
-			return false;
-		}
-		if ((row % 8) == 0) {
-			vTaskDelay(1);
-		}
+	s_row_fill = 0;
+	s_rows_sent = 0;
+	s_frame_active = true;
+	return true;
+}
+
+static bool epd_feed_packed_byte(uint8_t value) {
+	if (!s_frame_active) {
+		return false;
+	}
+	s_row_buffer[s_row_fill++] = value;
+	if (s_row_fill < PANEL_ROW_BYTES) {
+		return true;
+	}
+	if (!epd_send_data_buffer(s_row_buffer, PANEL_ROW_BYTES)) {
+		ESP_LOGE(TAG, "failed writing frame row %u", (unsigned)s_rows_sent);
+		s_frame_active = false;
+		return false;
+	}
+	s_rows_sent++;
+	s_row_fill = 0;
+	if ((s_rows_sent % 8) == 0) {
+		vTaskDelay(1);
+	}
+	return true;
+}
+
+static bool epd_end_frame(void) {
+	bool complete = s_frame_active && s_row_fill == 0 && s_rows_sent == PANEL_HEIGHT;
+	s_frame_active = false;
+	if (!complete) {
+		ESP_LOGE(
+			TAG,
+			"incomplete frame: rows=%u fill=%u",
+			(unsigned)s_rows_sent,
+			(unsigned)s_row_fill
+		);
+		return false;
 	}
 	if (!epd_turn_on_display()) {
 		ESP_LOGE(TAG, "display refresh failed");
 		return false;
 	}
 	return true;
+}
+
+static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t width, uint16_t height) {
+	if (width != PANEL_WIDTH || height != PANEL_HEIGHT) {
+		ESP_LOGE(TAG, "unexpected frame dimensions %ux%u", width, height);
+		return false;
+	}
+	if (!epd_begin_frame()) {
+		return false;
+	}
+	const size_t packed_len = (size_t)(width / 2) * height;
+	for (size_t i = 0; i < packed_len; i++) {
+		if (!epd_feed_packed_byte(packed_buffer[i])) {
+			return false;
+		}
+	}
+	return epd_end_frame();
 }
 
 static uint8_t panel_color_from_pf7a(uint8_t value) {
@@ -390,13 +450,11 @@ static bool pf7a_stream_write_pixel(pf7a_stream_t *state, size_t pixel_index, ui
 		return false;
 	}
 	uint8_t color = panel_color_from_pf7a(value);
-	uint8_t *packed = &s_panel_buffer[pixel_index / 2];
 	if ((pixel_index & 1) == 0) {
-		*packed = (uint8_t)((color << 4) | (*packed & 0x0F));
-	} else {
-		*packed = (uint8_t)((*packed & 0xF0) | color);
+		state->pending_nibble = (uint8_t)(color << 4);
+		return true;
 	}
-	return true;
+	return epd_feed_packed_byte((uint8_t)(state->pending_nibble | color));
 }
 
 static bool pf7a_stream_emit_pixel(pf7a_stream_t *state, uint8_t value) {
@@ -420,8 +478,9 @@ static bool pf7a_stream_parse_header(pf7a_stream_t *state) {
 		return false;
 	}
 	state->header_ok = true;
-	memset(s_panel_buffer, 0, PANEL_BUFFER_SIZE);
-	return true;
+	// Start the panel transfer now; rows are pushed as the download delivers
+	// them. The refresh only happens once every row arrived.
+	return epd_begin_frame();
 }
 
 static esp_err_t pf7a_http_event_handler(esp_http_client_event_t *evt) {
@@ -521,12 +580,6 @@ bool display_driver_init(void) {
 		return false;
 	}
 
-	s_panel_buffer = (uint8_t *)heap_caps_malloc(PANEL_BUFFER_SIZE, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
-	if (s_panel_buffer == NULL) {
-		ESP_LOGE(TAG, "failed to allocate DMA-capable panel buffer");
-		return false;
-	}
-
 	if (!epd_init_sequence()) {
 		ESP_LOGE(TAG, "panel init sequence failed");
 		return false;
@@ -566,17 +619,18 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		ESP_LOGE(TAG, "invalid raw frame size");
 		return false;
 	}
-	for (uint16_t y = 0; y < height; y++) {
-		size_t src_row = (size_t)y * width;
-		size_t dst_row = (size_t)y * (width / 2);
-		for (uint16_t x = 0; x < width; x += 2) {
-			uint8_t left = panel_color_from_pf7a(pixels[src_row + x]);
-			uint8_t right = panel_color_from_pf7a(pixels[src_row + x + 1]);
-			s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
+	if (!epd_begin_frame()) {
+		return false;
+	}
+	for (size_t i = 0; i < pixel_count; i += 2) {
+		uint8_t left = panel_color_from_pf7a(pixels[i]);
+		uint8_t right = panel_color_from_pf7a(pixels[i + 1]);
+		if (!epd_feed_packed_byte((uint8_t)((left << 4) | right))) {
+			return false;
 		}
 	}
 
-	if (!epd_display_packed_buffer(s_panel_buffer, width, height)) {
+	if (!epd_end_frame()) {
 		return false;
 	}
 
@@ -585,7 +639,7 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 }
 
 bool display_driver_render_pf7a_url(const char *url) {
-	if (!s_bus_ready || s_panel_buffer == NULL) {
+	if (!s_bus_ready) {
 		ESP_LOGE(TAG, "display not initialized");
 		return false;
 	}
@@ -654,12 +708,12 @@ bool display_driver_render_pf7a_url(const char *url) {
 	if (state.failed) {
 		return false;
 	}
-	if (state.failed || state.pixels_written != (size_t)PANEL_WIDTH * PANEL_HEIGHT) {
+	if (state.pixels_written != (size_t)PANEL_WIDTH * PANEL_HEIGHT) {
 		ESP_LOGE(TAG, "invalid streamed frame pixels: %u", (unsigned)state.pixels_written);
 		return false;
 	}
 
-	if (!epd_display_packed_buffer(s_panel_buffer, PANEL_WIDTH, PANEL_HEIGHT)) {
+	if (!epd_end_frame()) {
 		return false;
 	}
 	ESP_LOGI(TAG, "rendered streamed frame %ux%u", PANEL_WIDTH, PANEL_HEIGHT);
@@ -683,7 +737,7 @@ bool display_driver_render_packed_7color(const uint8_t *packed_buffer, size_t pa
 }
 
 bool display_driver_render_checkerboard(void) {
-	if (!s_bus_ready || s_panel_buffer == NULL) {
+	if (!s_bus_ready) {
 		ESP_LOGW(TAG, "checkerboard skipped (display not ready)");
 		return false;
 	}
@@ -692,17 +746,21 @@ bool display_driver_render_checkerboard(void) {
 	const uint8_t color_a = 0; // black
 	const uint8_t color_b = 1; // white
 
+	if (!epd_begin_frame()) {
+		return false;
+	}
 	for (uint16_t y = 0; y < PANEL_HEIGHT; y++) {
-		size_t dst_row = (size_t)y * (PANEL_WIDTH / 2);
 		for (uint16_t x = 0; x < PANEL_WIDTH; x += 2) {
 			uint8_t left = ((((x / tile) + (y / tile)) & 1) == 0) ? color_a : color_b;
 			uint16_t right_x = (uint16_t)(x + 1);
 			uint8_t right = ((((right_x / tile) + (y / tile)) & 1) == 0) ? color_a : color_b;
-			s_panel_buffer[dst_row + (x / 2)] = (uint8_t)((left << 4) | right);
+			if (!epd_feed_packed_byte((uint8_t)((left << 4) | right))) {
+				return false;
+			}
 		}
 	}
 
-	if (!epd_display_packed_buffer(s_panel_buffer, PANEL_WIDTH, PANEL_HEIGHT)) {
+	if (!epd_end_frame()) {
 		return false;
 	}
 	ESP_LOGI(TAG, "rendered offline checkerboard");
@@ -710,14 +768,22 @@ bool display_driver_render_checkerboard(void) {
 }
 
 bool display_driver_render_solid_test(uint8_t color) {
-	if (!s_bus_ready || s_panel_buffer == NULL) {
+	if (!s_bus_ready) {
 		ESP_LOGW(TAG, "solid test skipped (display not ready)");
 		return false;
 	}
 	uint8_t panel_color = panel_color_from_pf7a(color);
 	uint8_t packed = (uint8_t)((panel_color << 4) | panel_color);
-	memset(s_panel_buffer, packed, PANEL_BUFFER_SIZE);
-	if (!epd_display_packed_buffer(s_panel_buffer, PANEL_WIDTH, PANEL_HEIGHT)) {
+	if (!epd_begin_frame()) {
+		return false;
+	}
+	const size_t packed_len = (size_t)PANEL_ROW_BYTES * PANEL_HEIGHT;
+	for (size_t i = 0; i < packed_len; i++) {
+		if (!epd_feed_packed_byte(packed)) {
+			return false;
+		}
+	}
+	if (!epd_end_frame()) {
 		return false;
 	}
 	ESP_LOGI(TAG, "rendered solid test color=%u", color);
