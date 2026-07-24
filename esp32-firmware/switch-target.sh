@@ -23,9 +23,11 @@ fi
 
 if [ "$CURRENT_TARGET" != "$TARGET" ]; then
 	echo "Switching from '${CURRENT_TARGET:-none}' to '$TARGET'"
+	idf.py set-target "$TARGET"
+	# set-target creates a fresh default sdkconfig. Restore the committed
+	# target profile afterward so the following build uses its tuned values.
 	cp "$SDKCONFIG_SRC" "$SDKCONFIG_DEST"
 	idf.py fullclean
-	idf.py set-target "$TARGET"
 else
 	echo "Already targeting $TARGET"
 	if ! cmp -s "$SDKCONFIG_SRC" "$SDKCONFIG_DEST"; then

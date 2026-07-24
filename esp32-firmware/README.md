@@ -16,6 +16,10 @@ Both XIAO form-factor boards (ESP32-C6 and ESP32-S3) are supported using the sam
 silkscreen labels (D0-D10). Wire once; the firmware selects the correct GPIO
 mapping at compile time based on `CONFIG_IDF_TARGET`.
 
+The firmware targets the stable ESP-IDF 6.0 release line and is currently
+verified with ESP-IDF v6.0.2. Development snapshots such as `v6.1-dev` are not
+supported.
+
 ### 1) Wire the e-paper module
 
 Use the same physical wiring for both boards (silkscreen label wiring):
@@ -63,6 +67,7 @@ Use `switch-target.sh` to activate one before building:
 ```bash
 # one-time per shell
 . ~/esp/esp-idf/export.sh
+idf.py --version # must report ESP-IDF v6.0.x
 
 cd esp32-firmware
 
