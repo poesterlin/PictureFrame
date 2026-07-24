@@ -244,6 +244,11 @@ static bool epd_turn_on_display(void) {
 	}
 	ESP_LOGI(TAG, "POWER_ON complete (busy=%d)", gpio_get_level(PIN_BUSY));
 
+	if (!epd_send_command(0x06) || !epd_send_data_byte(0x6F) || !epd_send_data_byte(0x1F) ||
+		!epd_send_data_byte(0x17) || !epd_send_data_byte(0x49)) {
+		return false;
+	}
+
 	ESP_LOGI(TAG, "DISPLAY_REFRESH command (busy=%d)", gpio_get_level(PIN_BUSY));
 	if (!epd_send_command(0x12) || !epd_send_data_byte(0x00)) {
 		return false;
@@ -286,9 +291,7 @@ static bool epd_init_sequence_once(void) {
 		!epd_send_data_byte(0x18)) {
 		return false;
 	}
-	if (!epd_send_command(0x01) || !epd_send_data_byte(0x3F) || !epd_send_data_byte(0x00) ||
-		!epd_send_data_byte(0x32) || !epd_send_data_byte(0x2A) || !epd_send_data_byte(0x0E) ||
-		!epd_send_data_byte(0x2A)) {
+	if (!epd_send_command(0x01) || !epd_send_data_byte(0x3F)) {
 		return false;
 	}
 	if (!epd_send_command(0x00) || !epd_send_data_byte(0x5F) || !epd_send_data_byte(0x69)) {
@@ -303,20 +306,14 @@ static bool epd_init_sequence_once(void) {
 		return false;
 	}
 	if (!epd_send_command(0x06) || !epd_send_data_byte(0x6F) || !epd_send_data_byte(0x1F) ||
-		!epd_send_data_byte(0x1F) || !epd_send_data_byte(0x22)) {
+		!epd_send_data_byte(0x17) || !epd_send_data_byte(0x49)) {
 		return false;
 	}
 	if (!epd_send_command(0x08) || !epd_send_data_byte(0x6F) || !epd_send_data_byte(0x1F) ||
 		!epd_send_data_byte(0x1F) || !epd_send_data_byte(0x22)) {
 		return false;
 	}
-	if (!epd_send_command(0x13) || !epd_send_data_byte(0x00) || !epd_send_data_byte(0x04)) {
-		return false;
-	}
-	if (!epd_send_command(0x30) || !epd_send_data_byte(0x3C)) {
-		return false;
-	}
-	if (!epd_send_command(0x41) || !epd_send_data_byte(0x00)) {
+	if (!epd_send_command(0x30) || !epd_send_data_byte(0x03)) {
 		return false;
 	}
 	if (!epd_send_command(0x50) || !epd_send_data_byte(0x3F)) {
@@ -329,22 +326,16 @@ static bool epd_init_sequence_once(void) {
 		!epd_send_data_byte(0x01) || !epd_send_data_byte(0xE0)) {
 		return false;
 	}
-	if (!epd_send_command(0x82) || !epd_send_data_byte(0x1E)) {
-		return false;
-	}
-	if (!epd_send_command(0x84) || !epd_send_data_byte(0x00)) {
-		return false;
-	}
-	if (!epd_send_command(0x86) || !epd_send_data_byte(0x00)) {
+	if (!epd_send_command(0x84) || !epd_send_data_byte(0x01)) {
 		return false;
 	}
 	if (!epd_send_command(0xE3) || !epd_send_data_byte(0x2F)) {
 		return false;
 	}
-	if (!epd_send_command(0xE0) || !epd_send_data_byte(0x00)) {
+	if (!epd_send_command(0x04)) {
 		return false;
 	}
-	if (!epd_send_command(0xE6) || !epd_send_data_byte(0x00)) {
+	if (!epd_wait_busy_with_probe(250, "INIT_POWER_ON")) {
 		return false;
 	}
 	return true;
@@ -438,18 +429,32 @@ static bool epd_display_packed_buffer(const uint8_t *packed_buffer, uint16_t wid
 	return epd_end_frame();
 }
 
-static uint8_t panel_color_from_pf7a(uint8_t value) {
-	// PF7A palette: black, white, green, blue, red, yellow, orange, purple.
-	// Waveshare panel nibbles: black, white, yellow, red, reserved, blue, green, orange.
-	static const uint8_t panel_colors[] = {0, 1, 6, 5, 3, 2, 7, 4};
-	return value < sizeof(panel_colors) ? panel_colors[value] : 1;
+static uint8_t panel_color_from_pf7a(uint8_t value, size_t pixel_index) {
+	// Spectra 6 documents six native colors. This panel also renders nibble 7
+	// as purple; nibble 4 is a second, muted mauve. Synthesize PF7A orange with
+	// a stable red/yellow pattern because neither undocumented color is orange.
+	static const uint8_t panel_colors[] = {0, 1, 6, 5, 3, 2};
+	if (value < sizeof(panel_colors)) {
+		return panel_colors[value];
+	}
+
+	size_t x = pixel_index % PANEL_WIDTH;
+	size_t y = pixel_index / PANEL_WIDTH;
+	bool alternate = ((x ^ y) & 1) != 0;
+	if (value == 6) {
+		return alternate ? 2 : 3;
+	}
+	if (value == 7) {
+		return 7;
+	}
+	return 1;
 }
 
 static bool pf7a_stream_write_pixel(pf7a_stream_t *state, size_t pixel_index, uint8_t value) {
 	if (pixel_index >= (size_t)PANEL_WIDTH * PANEL_HEIGHT) {
 		return false;
 	}
-	uint8_t color = panel_color_from_pf7a(value);
+	uint8_t color = panel_color_from_pf7a(value, pixel_index);
 	if ((pixel_index & 1) == 0) {
 		state->pending_nibble = (uint8_t)(color << 4);
 		return true;
@@ -586,7 +591,7 @@ bool display_driver_init(void) {
 	}
 
 	s_bus_ready = true;
-	ESP_LOGI(TAG, "display initialized for Waveshare 7.3in 7-color");
+	ESP_LOGI(TAG, "display initialized for Waveshare 7.3in E Spectra 6");
 	return true;
 }
 
@@ -623,8 +628,8 @@ bool display_driver_render_pf7a(const uint8_t *payload, size_t payload_len) {
 		return false;
 	}
 	for (size_t i = 0; i < pixel_count; i += 2) {
-		uint8_t left = panel_color_from_pf7a(pixels[i]);
-		uint8_t right = panel_color_from_pf7a(pixels[i + 1]);
+		uint8_t left = panel_color_from_pf7a(pixels[i], i);
+		uint8_t right = panel_color_from_pf7a(pixels[i + 1], i + 1);
 		if (!epd_feed_packed_byte((uint8_t)((left << 4) | right))) {
 			return false;
 		}
@@ -772,14 +777,14 @@ bool display_driver_render_solid_test(uint8_t color) {
 		ESP_LOGW(TAG, "solid test skipped (display not ready)");
 		return false;
 	}
-	uint8_t panel_color = panel_color_from_pf7a(color);
-	uint8_t packed = (uint8_t)((panel_color << 4) | panel_color);
 	if (!epd_begin_frame()) {
 		return false;
 	}
-	const size_t packed_len = (size_t)PANEL_ROW_BYTES * PANEL_HEIGHT;
-	for (size_t i = 0; i < packed_len; i++) {
-		if (!epd_feed_packed_byte(packed)) {
+	const size_t pixel_count = (size_t)PANEL_WIDTH * PANEL_HEIGHT;
+	for (size_t i = 0; i < pixel_count; i += 2) {
+		uint8_t left = panel_color_from_pf7a(color, i);
+		uint8_t right = panel_color_from_pf7a(color, i + 1);
+		if (!epd_feed_packed_byte((uint8_t)((left << 4) | right))) {
 			return false;
 		}
 	}
