@@ -170,6 +170,7 @@ export async function runPluginInstance(
 		}
 
 		const canReuseExisting =
+			!forceDisplay &&
 			instance.compareMeaningfulChanges &&
 			instance.lastMeaningfulHash === meaningfulHash &&
 			instance.lastRenderHash === renderHash &&
