@@ -1,5 +1,6 @@
 import {
 	boolean,
+	jsonb,
 	integer,
 	pgTable,
 	serial,
@@ -46,6 +47,14 @@ export const pictures = pgTable('pictures', {
 		.references((): AnyPgColumn => pictureFrames.id, fullCascade),
 	uploaderName: text('uploader_name').notNull(),
 	fileName: text('file_name').notNull(),
+	sourceType: text('source_type').notNull().default('upload'),
+	pluginInstanceId: integer('plugin_instance_id').references(
+		(): AnyPgColumn => pluginInstances.id,
+		fullCascade
+	),
+	contentHash: text('content_hash'),
+	eligible: boolean('eligible').notNull().default(true),
+	supersededAt: timestamp('superseded_at', { withTimezone: true, mode: 'date' }),
 	favorite: boolean('favorite').notNull().default(false),
 	skipped: boolean('skipped').notNull().default(false),
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull()
@@ -80,6 +89,36 @@ export const pictureFrames = pgTable(
 
 export type PictureFrame = typeof pictureFrames.$inferSelect;
 export type NewPictureFrame = typeof pictureFrames.$inferInsert;
+
+export const pluginInstances = pgTable('plugin_instances', {
+	id: serial('id').primaryKey(),
+	frameId: integer('frame_id')
+		.notNull()
+		.references(() => pictureFrames.id, fullCascade),
+	pluginKey: text('plugin_key').notNull(),
+	name: text('name').notNull(),
+	endpointUrl: text('endpoint_url').notNull(),
+	enabled: boolean('enabled').notNull().default(false),
+	pollEverySeconds: integer('poll_every_seconds').notNull().default(300),
+	compareMeaningfulChanges: boolean('compare_meaningful_changes').notNull().default(true),
+	displayMode: text('display_mode').notNull().default('immediate'),
+	config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+	nextRunAt: timestamp('next_run_at', { withTimezone: true, mode: 'date' }),
+	lockedUntil: timestamp('locked_until', { withTimezone: true, mode: 'date' }),
+	lastFetchedAt: timestamp('last_fetched_at', { withTimezone: true, mode: 'date' }),
+	lastSuccessAt: timestamp('last_success_at', { withTimezone: true, mode: 'date' }),
+	lastSourceHash: text('last_source_hash'),
+	lastMeaningfulHash: text('last_meaningful_hash'),
+	lastRenderHash: text('last_render_hash'),
+	lastStatus: text('last_status'),
+	lastError: text('last_error'),
+	consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull()
+});
+
+export type PluginInstance = typeof pluginInstances.$inferSelect;
+export type NewPluginInstance = typeof pluginInstances.$inferInsert;
 
 export const publicUploadLinks = pgTable(
 	'public_upload_links',

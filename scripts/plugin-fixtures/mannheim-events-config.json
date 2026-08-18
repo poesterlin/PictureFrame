@@ -1,0 +1,8 @@
+{
+	"title": "MANNHEIM / DIESE WOCHE",
+	"maxEvents": 4,
+	"daysAhead": 14,
+	"maxDurationDays": 2,
+	"showVenue": true,
+	"accent": "blue"
+}

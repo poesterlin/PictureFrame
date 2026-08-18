@@ -1,13 +1,10 @@
-import type { DisplayUpdateMessage } from '$lib/device-contract';
 import { db } from '$lib/server/db';
 import { isAdminUser } from '$lib/server/admin';
 import { pictureFrames, pictures } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { error, json, type RequestHandler } from '@sveltejs/kit';
-import { getDeviceChannel } from '$lib/server/device/channel';
 import { deleteFrameByKey } from '../../../../realtime/frame-storage.js';
-
-const channel = getDeviceChannel();
+import { publishPicture } from '$lib/server/device/display';
 
 function parseFrameId(value: string | null) {
 	if (!value) {
@@ -77,7 +74,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const pictureScope = and(eq(pictures.fileName, key), eq(pictures.frameId, frame.id));
 
 	const [picture] = await db
-		.select({ fileName: pictures.fileName })
+		.select({ id: pictures.id, fileName: pictures.fileName })
 		.from(pictures)
 		.where(pictureScope)
 		.limit(1);
@@ -86,13 +83,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		error(404, 'Bild nicht gefunden');
 	}
 
-	const message: DisplayUpdateMessage = {
-		type: 'display',
-		requestId: crypto.randomUUID(),
-		createdAt: new Date().toISOString(),
+	await publishPicture({
+		frameId: frame.id,
+		pictureId: picture.id,
 		artifactKey: picture.fileName
-	};
-	channel.publishDisplay(frame.id, message);
+	});
 
 	return json({ ok: true });
 };

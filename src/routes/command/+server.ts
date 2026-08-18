@@ -1,9 +1,10 @@
-import type { DeviceCommandMessage, DisplayUpdateMessage } from '$lib/device-contract';
+import type { DeviceCommandMessage } from '$lib/device-contract';
 import { db } from '$lib/server/db';
-import { pictureFrames } from '$lib/server/db/schema';
+import { pictureFrames, pictures } from '$lib/server/db/schema';
 import { getDeviceChannel } from '$lib/server/device/channel';
+import { publishPicture } from '$lib/server/device/display';
 import { pickRandomPictureForFrame } from '$lib/server/device/picker';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { error, type RequestHandler } from '@sveltejs/kit';
 import { deleteFrameByKey } from '../../../realtime/frame-storage.js';
 
@@ -36,14 +37,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			typeof body.artifactKey === 'string'
 				? body.artifactKey
 				: (body.key as string).replace(/\.[^./]+$/i, '.pf7a');
-		const message: DisplayUpdateMessage = {
-			type: 'display',
-			requestId: typeof body.requestId === 'string' ? body.requestId : crypto.randomUUID(),
-			createdAt: new Date().toISOString(),
+		const [picture] = await db
+			.select({ id: pictures.id })
+			.from(pictures)
+			.where(and(eq(pictures.frameId, frameId), eq(pictures.fileName, resolvedArtifactKey)))
+			.limit(1);
+		if (!picture) {
+			return new Response(JSON.stringify({ ok: false, error: 'Frame image not found' }), {
+				status: 404
+			});
+		}
+		await publishPicture({
+			frameId,
+			pictureId: picture.id,
 			artifactKey: resolvedArtifactKey,
-			legacyKey: typeof body.key === 'string' ? body.key : undefined
-		};
-		channel.publishDisplay(frameId, message);
+			requestId: typeof body.requestId === 'string' ? body.requestId : undefined
+		});
 		return new Response(JSON.stringify({ ok: true }));
 	}
 
@@ -56,10 +65,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					status: 404
 				});
 			}
-			channel.publishDisplay(frameId, {
-				type: 'display',
-				requestId: crypto.randomUUID(),
-				createdAt: new Date().toISOString(),
+			await publishPicture({
+				frameId,
+				pictureId: picked.pictureId,
 				artifactKey
 			});
 			return new Response(JSON.stringify({ ok: true, artifactKey }));

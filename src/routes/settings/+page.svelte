@@ -4,6 +4,8 @@
 
 	export let data: {
 		frame: { id: number; frameName: string; refreshEverySeconds: number } | null;
+		frames: Array<{ id: number; frameName: string }>;
+		isAdmin: boolean;
 		links: Array<{
 			id: number;
 			frameId: number;
@@ -76,7 +78,21 @@
 
 <section class="settings-wrap">
 	<div class="settings-card">
+		{#if data.isAdmin && data.frames.length > 0}
+			<form class="frame-picker" method="GET" action="/settings">
+				<label for="settings-frame">Frame</label>
+				<select
+					id="settings-frame"
+					name="frameId"
+					value={data.frame?.id}
+					on:change={(event) => event.currentTarget.form?.submit()}
+				>
+					{#each data.frames as frame}<option value={frame.id}>{frame.frameName}</option>{/each}
+				</select>
+			</form>
+		{/if}
 		<form method="POST" action="?/saveSettings" use:enhance>
+			{#if data.frame}<input type="hidden" name="frameId" value={data.frame.id} />{/if}
 			<header>
 				<h1>Anzeigeeinstellungen</h1>
 			</header>
@@ -113,6 +129,12 @@
 		</form>
 
 		<div class="group">
+			<h2>Content plugins</h2>
+			<p class="subtitle">Add event calendars and live transport information to your frame.</p>
+			<a class="plugin-link" href="/plugins">Manage plugins →</a>
+		</div>
+
+		<div class="group">
 			<h2>Upload-Link</h2>
 			{#if data.frame}
 				<p class="subtitle">
@@ -143,11 +165,13 @@
 								{#if !link.disabled}
 									<form method="POST" action="?/disableUploadLink">
 										<input type="hidden" name="linkId" value={link.id} />
+										<input type="hidden" name="frameId" value={link.frameId} />
 										<button type="submit" class="danger">Link deaktivieren</button>
 									</form>
 								{:else}
 									<form method="POST" action="?/deleteUploadLink">
 										<input type="hidden" name="linkId" value={link.id} />
+										<input type="hidden" name="frameId" value={link.frameId} />
 										<button type="submit">Link löschen</button>
 									</form>
 								{/if}
@@ -190,6 +214,25 @@
 		box-shadow:
 			0 30px 70px -45px rgba(0, 0, 0, 0.6),
 			0 10px 22px -16px rgba(0, 0, 0, 0.4);
+	}
+
+	.frame-picker {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid rgba(17, 24, 39, 0.12);
+	}
+
+	.frame-picker select {
+		min-width: min(320px, 65vw);
+		padding: 0.55rem;
+		border: 1px solid rgba(17, 24, 39, 0.2);
+		border-radius: 9px;
+		background: white;
+		font: inherit;
+		font-size: 0.85rem;
 	}
 
 	header {
@@ -300,6 +343,18 @@
 		display: grid;
 		gap: 0.55rem;
 		grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+	}
+
+	.plugin-link {
+		display: block;
+		padding: 0.72rem 0.8rem;
+		border-radius: 10px;
+		background: #111827;
+		color: white;
+		font-size: 0.9rem;
+		font-weight: 600;
+		text-align: center;
+		text-decoration: none;
 	}
 
 	button {

@@ -57,6 +57,13 @@
 			"when": 1783521490719,
 			"tag": "0007_mighty_zarek",
 			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "7",
+			"when": 1786275454596,
+			"tag": "0008_fluffy_expediter",
+			"breakpoints": true
 		}
 	]
 }

@@ -15,20 +15,19 @@
 						<h2>Admin</h2>
 						<p>Geschenk-Frames vorbereiten und später per Claim-Code übergeben.</p>
 					</a>
-					<a class="card" href="/preview">
-						<h2>Bilder</h2>
-						<p>Bilder manuell anzeigen und verwalten.</p>
-					</a>
-				{:else}
-					<a class="card" href="/preview">
-						<h2>Bilder</h2>
-						<p>Bilder manuell anzeigen und verwalten.</p>
-					</a>
-					<a class="card" href="/settings">
-						<h2>Frame steuern</h2>
-						<p>Intervall, Upload-Links und Wartungsaktionen verwalten.</p>
-					</a>
 				{/if}
+				<a class="card" href="/preview">
+					<h2>Bilder</h2>
+					<p>Bilder manuell anzeigen und verwalten.</p>
+				</a>
+				<a class="card" href="/settings">
+					<h2>Frame steuern</h2>
+					<p>Intervall, Upload-Links und Wartungsaktionen verwalten.</p>
+				</a>
+				<a class="card" href="/plugins">
+					<h2>Content Plugins</h2>
+					<p>Events und Verkehrsmeldungen für den Frame konfigurieren.</p>
+				</a>
 				<a class="card" href="/connect">
 					<h2>WLAN verbinden</h2>
 					<p>WLAN Setup für den Frame starten.</p>

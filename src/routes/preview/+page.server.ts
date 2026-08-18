@@ -1,8 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { isAdminUser } from '$lib/server/admin';
-import { pictureFrames, pictures } from '$lib/server/db/schema';
+import { pictures } from '$lib/server/db/schema';
+import {
+	activeFrameIdFrom,
+	resolveAccessibleFrame,
+	setActiveFrameCookie
+} from '$lib/server/frame-access';
 import { desc, eq } from 'drizzle-orm';
 
 export const prerender = false;
@@ -20,26 +24,23 @@ function parseFrameId(value: string | null) {
 	return frameId;
 }
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 	if (!locals.user) {
 		throw redirect(302, '/login?redirect=%2Fpreview');
 	}
 
-	const isAdmin = isAdminUser(locals.user);
-	const requestedFrameId = parseFrameId(url.searchParams.get('frameId'));
-
-	const frames = await db
-		.select({
-			id: pictureFrames.id,
-			frameName: pictureFrames.frameName
-		})
-		.from(pictureFrames)
-		.where(isAdmin ? undefined : eq(pictureFrames.ownerUserId, locals.user.id));
-
-	const selectedFrame =
-		(requestedFrameId ? frames.find((frame) => frame.id === requestedFrameId) : null) ??
-		frames[0] ??
-		null;
+	const requestedFrameId = activeFrameIdFrom(
+		cookies,
+		parseFrameId(url.searchParams.get('frameId'))
+	);
+	const {
+		frame: selectedFrame,
+		frames,
+		isAdmin
+	} = await resolveAccessibleFrame(locals.user, requestedFrameId);
+	if (isAdmin && selectedFrame) {
+		setActiveFrameCookie(cookies, selectedFrame.id, url.protocol === 'https:');
+	}
 
 	if (!selectedFrame) {
 		if (!isAdmin) {

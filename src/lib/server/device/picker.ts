@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
-import { pictures } from '$lib/server/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { pictures, pluginInstances } from '$lib/server/db/schema';
+import { and, eq, or } from 'drizzle-orm';
 
 const FAVORITE_WEIGHT = 3;
 
@@ -25,7 +25,18 @@ export async function pickRandomPictureForFrame(
 			favorite: pictures.favorite
 		})
 		.from(pictures)
-		.where(and(eq(pictures.frameId, frameId), eq(pictures.skipped, false)));
+		.leftJoin(pluginInstances, eq(pictures.pluginInstanceId, pluginInstances.id))
+		.where(
+			and(
+				eq(pictures.frameId, frameId),
+				eq(pictures.skipped, false),
+				eq(pictures.eligible, true),
+				or(
+					eq(pictures.sourceType, 'upload'),
+					and(eq(pictures.sourceType, 'plugin'), eq(pluginInstances.enabled, true))
+				)
+			)
+		);
 
 	if (rows.length === 0) {
 		return null;

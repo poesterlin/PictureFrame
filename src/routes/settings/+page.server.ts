@@ -3,37 +3,52 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { pictureFrames } from '$lib/server/db/schema';
+import { pictureFrames, publicUploadLinks } from '$lib/server/db/schema';
+import {
+	activeFrameIdFrom,
+	canAccessFrame,
+	resolveAccessibleFrame,
+	setActiveFrameCookie
+} from '$lib/server/frame-access';
 import {
 	createPublicUploadLink,
-	deleteUploadLinkForOwner,
-	disableUploadLinkForOwner,
-	listPublicUploadLinksByOwner
+	deleteUploadLink,
+	disableUploadLink
 } from '$lib/server/public-upload';
 import { getDeviceChannel } from '$lib/server/device/channel';
 
 export const prerender = false;
 const channel = getDeviceChannel();
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 	if (!locals.user) {
 		throw redirect(302, '/login?redirect=%2Fsettings');
 	}
 
-	const [frame] = await db
-		.select({
-			id: pictureFrames.id,
-			frameName: pictureFrames.frameName,
-			refreshEverySeconds: pictureFrames.refreshEverySeconds
-		})
-		.from(pictureFrames)
-		.where(eq(pictureFrames.ownerUserId, locals.user.id))
-		.limit(1);
-
-	const links = await listPublicUploadLinksByOwner(locals.user.id);
+	const requestedFrameId = activeFrameIdFrom(
+		cookies,
+		Number(url.searchParams.get('frameId')) || null
+	);
+	const { frame, frames, isAdmin } = await resolveAccessibleFrame(locals.user, requestedFrameId);
+	if (isAdmin && frame) setActiveFrameCookie(cookies, frame.id, url.protocol === 'https:');
+	const links = frame
+		? await db
+				.select({
+					id: publicUploadLinks.id,
+					frameId: publicUploadLinks.frameId,
+					uploadCount: publicUploadLinks.uploadCount,
+					disabled: publicUploadLinks.disabled,
+					frameName: pictureFrames.frameName
+				})
+				.from(publicUploadLinks)
+				.innerJoin(pictureFrames, eq(publicUploadLinks.frameId, pictureFrames.id))
+				.where(eq(publicUploadLinks.frameId, frame.id))
+		: [];
 
 	return {
-		frame: frame ?? null,
+		frame,
+		frames,
+		isAdmin,
 		links
 	};
 };
@@ -45,6 +60,8 @@ export const actions: Actions = {
 		}
 
 		const form = await request.formData();
+		const selectedFrame = await canAccessFrame(locals.user, Number(form.get('frameId')));
+		if (!selectedFrame) return fail(403, { message: 'Frame not available' });
 		const refreshEveryRaw = Number(form.get('refreshEvery'));
 		if (!Number.isFinite(refreshEveryRaw)) {
 			return fail(400, { message: 'Invalid refresh interval' });
@@ -52,20 +69,10 @@ export const actions: Actions = {
 
 		const refreshEvery = Math.max(30, Math.min(6 * 60 * 60, Math.floor(refreshEveryRaw)));
 
-		const [ownedFrame] = await db
-			.select({ id: pictureFrames.id })
-			.from(pictureFrames)
-			.where(eq(pictureFrames.ownerUserId, locals.user.id))
-			.limit(1);
-
-		if (!ownedFrame) {
-			return fail(400, { message: 'No frame linked to your account' });
-		}
-
 		await db
 			.update(pictureFrames)
 			.set({ refreshEverySeconds: refreshEvery, updatedAt: new Date() })
-			.where(eq(pictureFrames.id, ownedFrame.id));
+			.where(eq(pictureFrames.id, selectedFrame.id));
 
 		return { settingsSaved: true };
 	},
@@ -82,15 +89,8 @@ export const actions: Actions = {
 			return fail(400, { message: 'Invalid frame id' });
 		}
 
-		const [ownedFrame] = await db
-			.select({ id: pictureFrames.id })
-			.from(pictureFrames)
-			.where(and(eq(pictureFrames.id, frameId), eq(pictureFrames.ownerUserId, locals.user.id)))
-			.limit(1);
-
-		if (!ownedFrame) {
-			return fail(403, { message: 'Frame not owned by user' });
-		}
+		const selectedFrame = await canAccessFrame(locals.user, frameId);
+		if (!selectedFrame) return fail(403, { message: 'Frame not available' });
 
 		const created = await createPublicUploadLink(frameId);
 
@@ -108,15 +108,21 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const linkId = Number(form.get('linkId'));
+		const frameId = Number(form.get('frameId'));
 
 		if (!Number.isFinite(linkId) || linkId <= 0) {
 			return fail(400, { message: 'Invalid link id' });
 		}
 
-		const disabled = await disableUploadLinkForOwner(linkId, locals.user.id);
-		if (!disabled) {
-			return fail(404, { message: 'Upload link not found' });
-		}
+		const selectedFrame = await canAccessFrame(locals.user, frameId);
+		if (!selectedFrame) return fail(403, { message: 'Frame not available' });
+		const [link] = await db
+			.select({ id: publicUploadLinks.id })
+			.from(publicUploadLinks)
+			.where(and(eq(publicUploadLinks.id, linkId), eq(publicUploadLinks.frameId, frameId)))
+			.limit(1);
+		if (!link) return fail(404, { message: 'Upload link not found' });
+		await disableUploadLink(linkId);
 
 		return { success: true };
 	},
@@ -128,15 +134,27 @@ export const actions: Actions = {
 
 		const form = await request.formData();
 		const linkId = Number(form.get('linkId'));
+		const frameId = Number(form.get('frameId'));
 
 		if (!Number.isFinite(linkId) || linkId <= 0) {
 			return fail(400, { message: 'Invalid link id' });
 		}
 
-		const deleted = await deleteUploadLinkForOwner(linkId, locals.user.id);
-		if (!deleted) {
-			return fail(404, { message: 'Upload link not found or not deactivated' });
-		}
+		const selectedFrame = await canAccessFrame(locals.user, frameId);
+		if (!selectedFrame) return fail(403, { message: 'Frame not available' });
+		const [link] = await db
+			.select({ id: publicUploadLinks.id })
+			.from(publicUploadLinks)
+			.where(
+				and(
+					eq(publicUploadLinks.id, linkId),
+					eq(publicUploadLinks.frameId, frameId),
+					eq(publicUploadLinks.disabled, true)
+				)
+			)
+			.limit(1);
+		if (!link) return fail(404, { message: 'Upload link not found or not deactivated' });
+		await deleteUploadLink(linkId);
 
 		return { success: true };
 	}

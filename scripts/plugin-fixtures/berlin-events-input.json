@@ -1,0 +1,72 @@
+{
+	"messages": {
+		"messages": ["Ende des Berichts"],
+		"success": true
+	},
+	"results": {
+		"count": 6,
+		"items_per_page": 99999
+	},
+	"index": [
+		{
+			"id": 201,
+			"bezirk": "Neukölln",
+			"bezeichnung": "Sommerfest auf dem Tempelhofer Feld",
+			"strasse": "Tempelhofer Feld",
+			"plz": "12049",
+			"von": "09.08.2026",
+			"bis": "09.08.2026",
+			"zeit": "12-20 Uhr"
+		},
+		{
+			"id": 202,
+			"bezirk": "Friedrichshain-Kreuzberg",
+			"bezeichnung": "Kiezkonzert am Spreeufer",
+			"strasse": "East Side Gallery",
+			"plz": "10243",
+			"von": "10.08.2026",
+			"bis": "10.08.2026",
+			"zeit": "18-22 Uhr"
+		},
+		{
+			"id": 203,
+			"bezirk": "Mitte",
+			"bezeichnung": "Lange Nacht der Berliner Museen",
+			"strasse": "Museumsinsel",
+			"plz": "10178",
+			"von": "12.08.2026",
+			"bis": "12.08.2026",
+			"zeit": "18-02 Uhr"
+		},
+		{
+			"id": 204,
+			"bezirk": "Treptow-Köpenick",
+			"bezeichnung": "Street Food und Design Markt im Treptower Park",
+			"strasse": "Treptower Park",
+			"plz": "12435",
+			"von": "14.08.2026",
+			"bis": "16.08.2026",
+			"zeit": "Fr 16-22 Uhr\nSa/So 12-20 Uhr"
+		},
+		{
+			"id": 205,
+			"bezirk": "Charlottenburg-Wilmersdorf",
+			"bezeichnung": "Open-Air-Kino am Lietzensee",
+			"strasse": "Lietzenseepark",
+			"plz": "14057",
+			"von": "20.08.2026",
+			"bis": "20.08.2026",
+			"zeit": "20:30 Uhr"
+		},
+		{
+			"id": 206,
+			"bezirk": "Brandenburg",
+			"bezeichnung": "Potsdamer Sommermarkt",
+			"strasse": "Alter Markt",
+			"plz": "14467",
+			"von": "11.08.2026",
+			"bis": "11.08.2026",
+			"zeit": "10-18 Uhr"
+		}
+	]
+}

@@ -2,6 +2,7 @@ import { db } from '$lib/server/db';
 import { pictureFrames } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { getDeviceChannel } from './channel';
+import { publishPicture } from './display';
 import { pickRandomPictureForFrame } from './picker';
 
 const channel = getDeviceChannel();
@@ -50,10 +51,9 @@ export async function maybeRotate(frameId: number): Promise<RotationOutcome> {
 		return { rotated: false, reason: 'no-pictures' };
 	}
 
-	channel.publishDisplay(frameId, {
-		type: 'display',
-		requestId: crypto.randomUUID(),
-		createdAt: new Date().toISOString(),
+	await publishPicture({
+		frameId,
+		pictureId: picked.pictureId,
 		artifactKey: picked.artifactKey
 	});
 

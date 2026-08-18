@@ -49,6 +49,12 @@ BLE provisioning profile (for `/connect` page):
 - No queued downloads for later replay
 - On network failure the current frame remains until the next successful update
 
+## Content plugins
+
+Server-side content plugins can fetch JSON and generate display artifacts. The initial square plugin
+and its manual database configuration are documented in
+[`docs/content-plugins.md`](docs/content-plugins.md).
+
 ## Legacy Raspberry Pi Runtime
 
 The previous Pi implementation is kept in `update-service/` for temporary rollback/testing only and is no longer the primary path.

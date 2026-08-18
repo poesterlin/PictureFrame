@@ -1,0 +1,9 @@
+{
+	"title": "BERLIN / DIESE WOCHE",
+	"maxEvents": 4,
+	"daysAhead": 14,
+	"districts": [],
+	"includeBrandenburg": false,
+	"showAddress": true,
+	"accent": "red"
+}

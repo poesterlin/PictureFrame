@@ -25,6 +25,8 @@ update-service/output
 # Local frame storage (keep directory scaffold only)
 data/frames/*
 !data/frames/.gitkeep
+data/plugin-previews/*
+!data/plugin-previews/.gitkeep
 
 # ESP-IDF generated artifacts
 esp32-firmware/build/
