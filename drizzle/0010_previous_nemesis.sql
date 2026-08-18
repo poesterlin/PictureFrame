@@ -1,0 +1,1 @@
+ALTER TABLE "plugin_instances" ADD COLUMN "force_display_requested" boolean DEFAULT false NOT NULL;

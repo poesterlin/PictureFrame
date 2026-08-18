@@ -27,6 +27,7 @@
 				deleted?: boolean;
 				ranNow?: boolean;
 				runStatus?: string | null;
+				runQueued?: boolean;
 				message?: string;
 		  }
 		| undefined;
@@ -113,6 +114,11 @@
 			</select>
 		</form>
 	{/if}
+	{#if form?.runQueued}
+		<div class="notice success">
+			The current run will finish first; refresh and display is queued.
+		</div>
+	{/if}
 
 	{#if form?.message}<div class="notice error">{form.message}</div>{/if}
 	{#if form?.saved}<div class="notice success">Plugin saved. It will refresh shortly.</div>{/if}
@@ -126,7 +132,9 @@
 				? 'Plugin refreshed, but it has no active content to show.'
 				: form.runStatus === 'error'
 					? 'Plugin run failed. Check its error below.'
-					: 'Plugin refreshed and sent to the frame.'}
+					: form.runStatus === 'unchanged'
+						? 'Source content was unchanged; the existing image was sent to the frame again.'
+						: 'Plugin refreshed and sent to the frame.'}
 		</div>
 	{/if}
 

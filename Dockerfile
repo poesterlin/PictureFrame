@@ -18,6 +18,10 @@ RUN bun run build
 FROM oven/bun:1-debian AS runner
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV BODY_SIZE_LIMIT=Infinity

@@ -117,8 +117,12 @@ export const actions: Actions = {
 			.limit(1);
 		if (!instance) return fail(404, { message: 'Plugin instance not found' });
 		if (!instance.enabled) return fail(400, { message: 'Enable the plugin before running it' });
+		await db
+			.update(pluginInstances)
+			.set({ forceDisplayRequested: true, nextRunAt: new Date(), updatedAt: new Date() })
+			.where(eq(pluginInstances.id, instance.id));
 		const ran = await runPluginInstanceNow(instance.id);
-		if (!ran) return fail(409, { message: 'Plugin is already running' });
+		if (!ran) return { runQueued: true };
 		const [result] = await db
 			.select({ status: pluginInstances.lastStatus })
 			.from(pluginInstances)

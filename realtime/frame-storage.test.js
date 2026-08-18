@@ -8,7 +8,8 @@ import {
 	decodeFrameArtifactPayload,
 	ensureFrameArtifactFile,
 	listArtifactKeys,
-	normalizeFrameArtifactPayload
+	normalizeFrameArtifactPayload,
+	storeFrameArtifacts
 } from './frame-storage.js';
 
 const WIDTH = 800;
@@ -80,6 +81,45 @@ test('listArtifactKeys migrates to latest .pf7a format', async () => {
 		const keys = await listArtifactKeys();
 		assert.ok(keys.includes('frames/tester/a.pf7a'));
 		assert.ok(keys.includes('frames/tester/b.pf7a'));
+	} finally {
+		if (previousFramesDir === undefined) {
+			delete process.env.FRAMES_DIR;
+		} else {
+			process.env.FRAMES_DIR = previousFramesDir;
+		}
+		await fs.rm(dir, { recursive: true, force: true });
+	}
+});
+
+test('replaces plugin artifacts with one stable output file', async () => {
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pf7-replace-'));
+	const previousFramesDir = process.env.FRAMES_DIR;
+	process.env.FRAMES_DIR = dir;
+
+	try {
+		const owner = 'frame-1-plugin-2';
+		const ownerDir = path.join(dir, owner);
+		await fs.mkdir(ownerDir, { recursive: true });
+		await fs.writeFile(
+			path.join(ownerDir, 'old-output.pf7a'),
+			Buffer.concat([HEADER_RAW, Buffer.alloc(PIXELS, 1)])
+		);
+
+		const currentPixels = Buffer.alloc(PIXELS, 3);
+		const stored = await storeFrameArtifacts(
+			owner,
+			'current',
+			currentPixels,
+			Buffer.concat([HEADER_RAW, currentPixels]),
+			{ replaceOwnerArtifacts: true }
+		);
+
+		assert.equal(stored.artifactKey, `frames/${owner}/current.pf7a`);
+		assert.deepEqual(await fs.readdir(ownerDir), ['current.pf7a']);
+		assert.deepEqual(
+			decodeFrameArtifactPayload(await fs.readFile(path.join(ownerDir, 'current.pf7a'))),
+			currentPixels
+		);
 	} finally {
 		if (previousFramesDir === undefined) {
 			delete process.env.FRAMES_DIR;

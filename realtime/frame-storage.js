@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 const DEFAULT_FRAMES_DIR = path.join(process.cwd(), 'data', 'frames');
@@ -26,8 +27,15 @@ export async function ensureFramesDir() {
  * @param {string} requestId
  * @param {Buffer | Uint8Array | string} textPayload
  * @param {Buffer | Uint8Array} framePayload
+ * @param {{ replaceOwnerArtifacts?: boolean }} [options]
  */
-export async function storeFrameArtifacts(name, requestId, textPayload, framePayload) {
+export async function storeFrameArtifacts(
+	name,
+	requestId,
+	textPayload,
+	framePayload,
+	options = {}
+) {
 	const owner = safeSegment(name);
 	const fileId = safeSegment(requestId);
 	const baseDir = path.join(getFramesDir(), owner);
@@ -41,7 +49,22 @@ export async function storeFrameArtifacts(name, requestId, textPayload, framePay
 		throw new Error('invalid frame payload');
 	}
 
-	await fs.writeFile(pf7aAbsolute, normalizedFramePayload);
+	const temporaryPath = path.join(baseDir, `.${fileId}-${randomUUID()}.tmp`);
+	try {
+		await fs.writeFile(temporaryPath, normalizedFramePayload);
+		await fs.rename(temporaryPath, pf7aAbsolute);
+	} finally {
+		await fs.rm(temporaryPath, { force: true });
+	}
+
+	if (options.replaceOwnerArtifacts) {
+		const entries = await fs.readdir(baseDir, { withFileTypes: true });
+		await Promise.all(
+			entries
+				.filter((entry) => entry.isFile() && entry.name !== `${fileId}.pf7a`)
+				.map((entry) => fs.rm(path.join(baseDir, entry.name), { force: true }))
+		);
+	}
 
 	return {
 		artifactKey: pf7aRelative

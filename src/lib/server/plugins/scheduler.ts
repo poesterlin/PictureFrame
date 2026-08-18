@@ -32,7 +32,7 @@ async function claimPluginInstance(id: number, now: Date) {
 export async function runPluginInstanceNow(id: number): Promise<boolean> {
 	const instance = await claimPluginInstance(id, new Date());
 	if (!instance) return false;
-	await runPluginInstance(instance, { forceDisplay: true });
+	await runPluginInstance(instance);
 	return true;
 }
 
@@ -44,7 +44,11 @@ export async function runDuePluginInstances(): Promise<void> {
 		.where(
 			and(
 				eq(pluginInstances.enabled, true),
-				or(isNull(pluginInstances.nextRunAt), lte(pluginInstances.nextRunAt, now)),
+				or(
+					eq(pluginInstances.forceDisplayRequested, true),
+					isNull(pluginInstances.nextRunAt),
+					lte(pluginInstances.nextRunAt, now)
+				),
 				or(isNull(pluginInstances.lockedUntil), lt(pluginInstances.lockedUntil, now))
 			)
 		)

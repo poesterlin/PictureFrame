@@ -116,6 +116,14 @@ export async function runPluginInstance(
 			pluginKey: plugin.key,
 			pluginVersion: plugin.version
 		});
+		const consumedForceRequest = await db
+			.update(pluginInstances)
+			.set({ forceDisplayRequested: false })
+			.where(
+				and(eq(pluginInstances.id, instance.id), eq(pluginInstances.forceDisplayRequested, true))
+			)
+			.returning({ id: pluginInstances.id });
+		const forceDisplay = options.forceDisplay || consumedForceRequest.length > 0;
 		const nextRunAt = nextPollAt(instance, now, evaluation.nextEvaluationAt);
 
 		const [currentFrame] = await db
@@ -173,7 +181,7 @@ export async function runPluginInstance(
 					.update(pictures)
 					.set({ eligible: true })
 					.where(eq(pictures.id, existingPicture.id));
-				if (instance.displayMode === 'immediate' && !options.forceDisplay) {
+				if (instance.displayMode === 'immediate' && !forceDisplay) {
 					await publishPicture({
 						frameId: instance.frameId,
 						pictureId: existingPicture.id,
@@ -181,7 +189,7 @@ export async function runPluginInstance(
 					});
 				}
 			}
-			if (options.forceDisplay) {
+			if (forceDisplay) {
 				await publishPicture({
 					frameId: instance.frameId,
 					pictureId: existingPicture.id,
@@ -215,32 +223,40 @@ export async function runPluginInstance(
 		const requestId = crypto.randomUUID();
 		const stored = await storeFrameArtifacts(
 			`frame-${instance.frameId}-plugin-${instance.id}`,
-			requestId,
+			'current',
 			Buffer.from(encodedFrame.indexedPixels),
-			encodedFrame.artifact
+			encodedFrame.artifact,
+			{ replaceOwnerArtifacts: true }
 		);
 
 		const [createdPicture] = await db.transaction(async (transaction) => {
-			await transaction
-				.update(pictures)
-				.set({ eligible: false, supersededAt: now })
-				.where(eq(pictures.pluginInstanceId, instance.id));
-
-			const inserted = await transaction
-				.insert(pictures)
-				.values({
-					frameId: instance.frameId,
-					uploaderName: `Plugin: ${plugin.label}`,
-					fileName: stored.artifactKey,
-					sourceType: 'plugin',
-					pluginInstanceId: instance.id,
-					contentHash: renderHash,
-					eligible: true,
-					favorite: false,
-					skipped: false,
-					createdAt: now
-				})
-				.returning({ id: pictures.id, artifactKey: pictures.fileName });
+			const storedPicture = existingPicture
+				? await transaction
+						.update(pictures)
+						.set({
+							fileName: stored.artifactKey,
+							contentHash: renderHash,
+							eligible: true,
+							supersededAt: null,
+							createdAt: now
+						})
+						.where(eq(pictures.id, existingPicture.id))
+						.returning({ id: pictures.id, artifactKey: pictures.fileName })
+				: await transaction
+						.insert(pictures)
+						.values({
+							frameId: instance.frameId,
+							uploaderName: `Plugin: ${plugin.label}`,
+							fileName: stored.artifactKey,
+							sourceType: 'plugin',
+							pluginInstanceId: instance.id,
+							contentHash: renderHash,
+							eligible: true,
+							favorite: false,
+							skipped: false,
+							createdAt: now
+						})
+						.returning({ id: pictures.id, artifactKey: pictures.fileName });
 
 			await transaction
 				.update(pluginInstances)
@@ -259,18 +275,14 @@ export async function runPluginInstance(
 				})
 				.where(eq(pluginInstances.id, instance.id));
 
-			return inserted;
+			return storedPicture;
 		});
 
 		if (!createdPicture) {
 			throw new Error('Plugin image record was not created');
 		}
 
-		if (
-			options.forceDisplay ||
-			instance.displayMode === 'immediate' ||
-			!currentFrame?.currentPictureId
-		) {
+		if (forceDisplay || instance.displayMode === 'immediate' || !currentFrame?.currentPictureId) {
 			await publishPicture({
 				frameId: instance.frameId,
 				pictureId: createdPicture.id,

@@ -101,6 +101,7 @@ export const pluginInstances = pgTable('plugin_instances', {
 	enabled: boolean('enabled').notNull().default(false),
 	pollEverySeconds: integer('poll_every_seconds').notNull().default(300),
 	compareMeaningfulChanges: boolean('compare_meaningful_changes').notNull().default(true),
+	forceDisplayRequested: boolean('force_display_requested').notNull().default(false),
 	displayMode: text('display_mode').notNull().default('immediate'),
 	config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
 	nextRunAt: timestamp('next_run_at', { withTimezone: true, mode: 'date' }),
