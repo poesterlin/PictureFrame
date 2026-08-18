@@ -32,7 +32,7 @@ async function claimPluginInstance(id: number, now: Date) {
 export async function runPluginInstanceNow(id: number): Promise<boolean> {
 	const instance = await claimPluginInstance(id, new Date());
 	if (!instance) return false;
-	await runPluginInstance(instance);
+	await runPluginInstance(instance, { forceDisplay: true });
 	return true;
 }
 

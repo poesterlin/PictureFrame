@@ -90,7 +90,10 @@ async function recordFailure(instance: PluginInstance, error: unknown) {
 	console.error(`[plugin] instance=${instance.id} key=${instance.pluginKey} failed:`, message);
 }
 
-export async function runPluginInstance(instance: PluginInstance): Promise<void> {
+export async function runPluginInstance(
+	instance: PluginInstance,
+	options: { forceDisplay?: boolean } = {}
+): Promise<void> {
 	const plugin = getContentPlugin(instance.pluginKey);
 	if (!plugin) {
 		await recordFailure(instance, new Error(`Unknown plugin: ${instance.pluginKey}`));
@@ -170,13 +173,20 @@ export async function runPluginInstance(instance: PluginInstance): Promise<void>
 					.update(pictures)
 					.set({ eligible: true })
 					.where(eq(pictures.id, existingPicture.id));
-				if (instance.displayMode === 'immediate') {
+				if (instance.displayMode === 'immediate' && !options.forceDisplay) {
 					await publishPicture({
 						frameId: instance.frameId,
 						pictureId: existingPicture.id,
 						artifactKey: existingPicture.artifactKey
 					});
 				}
+			}
+			if (options.forceDisplay) {
+				await publishPicture({
+					frameId: instance.frameId,
+					pictureId: existingPicture.id,
+					artifactKey: existingPicture.artifactKey
+				});
 			}
 
 			await db
@@ -256,7 +266,11 @@ export async function runPluginInstance(instance: PluginInstance): Promise<void>
 			throw new Error('Plugin image record was not created');
 		}
 
-		if (instance.displayMode === 'immediate' || !currentFrame?.currentPictureId) {
+		if (
+			options.forceDisplay ||
+			instance.displayMode === 'immediate' ||
+			!currentFrame?.currentPictureId
+		) {
 			await publishPicture({
 				frameId: instance.frameId,
 				pictureId: createdPicture.id,

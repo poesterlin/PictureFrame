@@ -22,7 +22,13 @@
 		}>;
 	};
 	export let form:
-		| { saved?: boolean; deleted?: boolean; ranNow?: boolean; message?: string }
+		| {
+				saved?: boolean;
+				deleted?: boolean;
+				ranNow?: boolean;
+				runStatus?: string | null;
+				message?: string;
+		  }
 		| undefined;
 
 	let selectedKey = data.catalog[0]?.key ?? '';
@@ -110,7 +116,19 @@
 
 	{#if form?.message}<div class="notice error">{form.message}</div>{/if}
 	{#if form?.saved}<div class="notice success">Plugin saved. It will refresh shortly.</div>{/if}
-	{#if form?.ranNow}<div class="notice success">Plugin finished running.</div>{/if}
+	{#if form?.ranNow}
+		<div
+			class="notice"
+			class:success={form.runStatus !== 'error'}
+			class:error={form.runStatus === 'error'}
+		>
+			{form.runStatus === 'inactive'
+				? 'Plugin refreshed, but it has no active content to show.'
+				: form.runStatus === 'error'
+					? 'Plugin run failed. Check its error below.'
+					: 'Plugin refreshed and sent to the frame.'}
+		</div>
+	{/if}
 
 	{#if !data.frame}
 		<section class="empty">
@@ -289,7 +307,7 @@
 							<form method="POST" action="?/runNow">
 								<input type="hidden" name="id" value={instance.id} />
 								<input type="hidden" name="frameId" value={data.frame.id} />
-								<button class="run" type="submit" disabled={!instance.enabled}>Run now</button>
+								<button class="run" type="submit" disabled={!instance.enabled}>Run & show</button>
 							</form>
 							<form method="POST" action="?/toggle">
 								<input type="hidden" name="id" value={instance.id} />

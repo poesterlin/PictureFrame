@@ -119,7 +119,12 @@ export const actions: Actions = {
 		if (!instance.enabled) return fail(400, { message: 'Enable the plugin before running it' });
 		const ran = await runPluginInstanceNow(instance.id);
 		if (!ran) return fail(409, { message: 'Plugin is already running' });
-		return { ranNow: true };
+		const [result] = await db
+			.select({ status: pluginInstances.lastStatus })
+			.from(pluginInstances)
+			.where(eq(pluginInstances.id, instance.id))
+			.limit(1);
+		return { ranNow: true, runStatus: result?.status ?? null };
 	},
 
 	delete: async ({ request, locals }) => {
