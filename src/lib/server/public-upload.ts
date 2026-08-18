@@ -24,6 +24,7 @@ export async function createPublicUploadLink(frameId: number) {
 	await db.insert(publicUploadLinks).values({
 		frameId,
 		codeHash: sha256Hex(normalizedCode),
+		code,
 		expiresAt,
 		maxUploads: 0,
 		uploadCount: 0,

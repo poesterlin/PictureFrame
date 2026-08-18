@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { layoutStack1D } from '../layout';
-import { fetchMannheimEventOccurrences } from '../sources/mannheim-events';
+import { qrSvg } from '../qr';
+import { fetchMannheimEventOccurrences, MANNHEIM_EVENTS_URL } from '../sources/mannheim-events';
 import type { ContentPlugin } from '../types';
 
 const occurrenceSchema = z.object({
@@ -96,7 +97,7 @@ function normalizedTitle(title: string) {
 export const mannheimEventsPlugin: ContentPlugin<Config, Response, Model> = {
 	key: 'mannheim-events',
 	label: 'Mannheim events',
-	version: 3,
+	version: 4,
 	configSchema,
 	async fetchInput() {
 		return { events: await fetchMannheimEventOccurrences() };
@@ -185,6 +186,7 @@ export const mannheimEventsPlugin: ContentPlugin<Config, Response, Model> = {
 			<text x="48" y="${header.start + 43}" font-family="sans-serif" font-size="30" font-weight="700" letter-spacing="0.8">${escapeXml(model.title)}</text>
 			<line x1="88" y1="${boxes[0].start + markerY}" x2="88" y2="${boxes[boxes.length - 1].start + markerY}" stroke="${violet}" stroke-width="2" stroke-dasharray="2 6"/>
 			${rows}
+			${qrSvg(MANNHEIM_EVENTS_URL, 722, 8, { moduleSize: 2, margin: 3 })}
 		</svg>`);
 	}
 };

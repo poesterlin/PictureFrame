@@ -93,6 +93,9 @@ Configuration supports `title`, `maxEvents` (one to four), `daysAhead`, `maxDura
 `showVenue`, and `accent`. The plugin owns its calendar fetch, so existing instances that point to
 the former local JSON adapter continue to work without making that internal HTTP request.
 
+The rendered image includes a small scannable QR code in the top-right corner that links to the
+Mannheim event calendar.
+
 Source: [Mannheim event calendar](https://www.mannheim.de/de/veranstaltungen).
 
 ## Berlin tram disruptions plugin

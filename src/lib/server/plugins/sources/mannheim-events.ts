@@ -1,3 +1,5 @@
+export const MANNHEIM_EVENTS_URL = 'https://www.mannheim.de/de/veranstaltungen';
+
 export type MannheimEventOccurrence = {
 	id: string;
 	title: string;
@@ -46,7 +48,7 @@ export function parseMannheimEventsPage(html: string): MannheimEventOccurrence[]
 				time,
 				venue,
 				address: [postalCode, street].filter(Boolean).join(' '),
-				url: new URL(path, 'https://www.mannheim.de').toString()
+				url: new URL(path, MANNHEIM_EVENTS_URL).toString()
 			};
 		})
 		.filter((event): event is MannheimEventOccurrence => event !== null);
@@ -67,7 +69,7 @@ export async function fetchMannheimEventOccurrences(
 	maxPages = 12
 ): Promise<MannheimEventOccurrence[]> {
 	const end = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
-	const base = new URL('https://www.mannheim.de/de/veranstaltungen');
+	const base = new URL(MANNHEIM_EVENTS_URL);
 	base.searchParams.set('date_from', formatGermanDate(now));
 	base.searchParams.set('date_to', formatGermanDate(end));
 

@@ -9,6 +9,7 @@
 		links: Array<{
 			id: number;
 			frameId: number;
+			code: string | null;
 			uploadCount: number;
 			disabled: boolean;
 			frameName: string;
@@ -61,9 +62,13 @@
 		return `${Math.round(seconds / 86400)} d`;
 	}
 
-	async function copyUploadUrl() {
-		if (!newUploadUrl) return;
-		await navigator.clipboard.writeText(newUploadUrl);
+	function uploadUrl(code: string) {
+		return new URL(`/upload?code=${encodeURIComponent(code)}`, $page.url.origin).toString();
+	}
+
+	async function copyUploadUrl(url = newUploadUrl) {
+		if (!url) return;
+		await navigator.clipboard.writeText(url);
 		linkNotice = 'Link in die Zwischenablage kopiert.';
 		linkNoticeType = 'success';
 	}
@@ -149,7 +154,7 @@
 				{#if newUploadUrl}
 					<div class="created-link">
 						<code>{newUploadUrl}</code>
-						<button type="button" on:click={copyUploadUrl}>Link kopieren</button>
+						<button type="button" on:click={() => copyUploadUrl()}>Link kopieren</button>
 					</div>
 				{/if}
 
@@ -158,11 +163,19 @@
 						{#each data.links as link}
 							<div class="link-row">
 								<div>
+									{#if link.code}
+										<code>{uploadUrl(link.code)}</code>
+									{/if}
 									<p>
 										{link.uploadCount} Hochladungen {#if link.disabled}| deaktiviert{/if}
 									</p>
 								</div>
 								{#if !link.disabled}
+									{#if link.code}
+										<button type="button" on:click={() => copyUploadUrl(uploadUrl(link.code!))}
+											>Link kopieren</button
+										>
+									{/if}
 									<form method="POST" action="?/disableUploadLink">
 										<input type="hidden" name="linkId" value={link.id} />
 										<input type="hidden" name="frameId" value={link.frameId} />
@@ -337,6 +350,15 @@
 		margin: 0.2rem 0 0;
 		font-size: 0.8rem;
 		color: #4b5563;
+	}
+
+	.link-row code {
+		display: block;
+		max-width: min(420px, 55vw);
+		overflow: hidden;
+		font-size: 0.8rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.preset-row {

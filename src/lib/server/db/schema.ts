@@ -128,6 +128,7 @@ export const publicUploadLinks = pgTable(
 			.notNull()
 			.references(() => pictureFrames.id, fullCascade),
 		codeHash: text('code_hash').notNull(),
+		code: text('code'),
 		expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
 		maxUploads: integer('max_uploads').notNull().default(0),
 		uploadCount: integer('upload_count').notNull().default(0),

@@ -36,6 +36,7 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 				.select({
 					id: publicUploadLinks.id,
 					frameId: publicUploadLinks.frameId,
+					code: publicUploadLinks.code,
 					uploadCount: publicUploadLinks.uploadCount,
 					disabled: publicUploadLinks.disabled,
 					frameName: pictureFrames.frameName
