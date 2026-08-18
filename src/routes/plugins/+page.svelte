@@ -21,7 +21,9 @@
 			consecutiveFailures: number;
 		}>;
 	};
-	export let form: { saved?: boolean; deleted?: boolean; message?: string } | undefined;
+	export let form:
+		| { saved?: boolean; deleted?: boolean; ranNow?: boolean; message?: string }
+		| undefined;
 
 	let selectedKey = data.catalog[0]?.key ?? '';
 	let editingId = 0;
@@ -108,6 +110,7 @@
 
 	{#if form?.message}<div class="notice error">{form.message}</div>{/if}
 	{#if form?.saved}<div class="notice success">Plugin saved. It will refresh shortly.</div>{/if}
+	{#if form?.ranNow}<div class="notice success">Plugin finished running.</div>{/if}
 
 	{#if !data.frame}
 		<section class="empty">
@@ -283,6 +286,11 @@
 						{#if instance.lastError}<p class="instance-error">{instance.lastError}</p>{/if}
 						<div class="actions">
 							<button type="button" on:click={() => edit(instance)}>Configure</button>
+							<form method="POST" action="?/runNow">
+								<input type="hidden" name="id" value={instance.id} />
+								<input type="hidden" name="frameId" value={data.frame.id} />
+								<button class="run" type="submit" disabled={!instance.enabled}>Run now</button>
+							</form>
 							<form method="POST" action="?/toggle">
 								<input type="hidden" name="id" value={instance.id} />
 								<input type="hidden" name="frameId" value={data.frame.id} /><input
@@ -613,6 +621,15 @@
 	}
 	.actions .danger {
 		color: #ac1c2b;
+	}
+	.actions .run {
+		background: #171714;
+		border-color: #171714;
+		color: white;
+	}
+	.actions button:disabled {
+		cursor: not-allowed;
+		opacity: 0.45;
 	}
 	.instance-error,
 	.notice {

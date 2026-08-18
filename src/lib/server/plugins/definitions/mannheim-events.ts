@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { layoutStack1D } from '../layout';
+import { fetchMannheimEventOccurrences } from '../sources/mannheim-events';
 import type { ContentPlugin } from '../types';
 
 const occurrenceSchema = z.object({
@@ -97,6 +98,9 @@ export const mannheimEventsPlugin: ContentPlugin<Config, Response, Model> = {
 	label: 'Mannheim events',
 	version: 3,
 	configSchema,
+	async fetchInput() {
+		return { events: await fetchMannheimEventOccurrences() };
+	},
 	normalize(input) {
 		return responseSchema.parse(input);
 	},

@@ -37,7 +37,7 @@ export const pluginCatalog: PluginCatalogEntry[] = [
 		label: 'Mannheim events',
 		description: 'Concerts, markets and short events from the official city calendar.',
 		city: 'Mannheim',
-		defaultEndpoint: '/plugin-inputs/mannheim-events.json',
+		defaultEndpoint: 'https://www.mannheim.de/de/veranstaltungen',
 		defaultConfig: {
 			title: 'MANNHEIM EVENTS',
 			maxEvents: 4,

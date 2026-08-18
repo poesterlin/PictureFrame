@@ -99,7 +99,9 @@ export async function runPluginInstance(instance: PluginInstance): Promise<void>
 
 	try {
 		const now = new Date();
-		const input = await fetchJson(instance.endpointUrl);
+		const input = plugin.fetchInput
+			? await plugin.fetchInput(instance.endpointUrl)
+			: await fetchJson(instance.endpointUrl);
 		const config = plugin.configSchema.parse(instance.config);
 		const normalizedData = plugin.normalize(input);
 		const evaluation = await plugin.evaluate(normalizedData, { config, now });

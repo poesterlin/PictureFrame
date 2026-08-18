@@ -76,11 +76,10 @@ For a live instance, use `berlin-events` as `plugin_key` and the API endpoint ab
 
 ## Mannheim events plugin
 
-The `mannheim-events` plugin reads the official Mannheim city calendar through the local
-`/plugin-inputs/mannheim-events.json` adapter. The adapter collects upcoming occurrences and the
-plugin collapses identical titles. Titles listed on more than two distinct dates are excluded by
-default, which keeps long-running exhibitions from displacing concerts, performances, markets and
-other short events.
+The `mannheim-events` plugin reads the official Mannheim city calendar directly. Its source adapter
+collects upcoming occurrences and the plugin collapses identical titles. Titles listed on more than
+two distinct dates are excluded by default, which keeps long-running exhibitions from displacing
+concerts, performances, markets and other short events.
 
 Render the local fixture:
 
@@ -91,8 +90,8 @@ bun run plugin:render -- mannheim-events \
 ```
 
 Configuration supports `title`, `maxEvents` (one to four), `daysAhead`, `maxDurationDays`,
-`showVenue`, and `accent`. A live instance should use the absolute URL for
-`/plugin-inputs/mannheim-events.json` on the PictureFrame server as its `endpoint_url`.
+`showVenue`, and `accent`. The plugin owns its calendar fetch, so existing instances that point to
+the former local JSON adapter continue to work without making that internal HTTP request.
 
 Source: [Mannheim event calendar](https://www.mannheim.de/de/veranstaltungen).
 

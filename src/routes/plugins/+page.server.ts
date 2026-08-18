@@ -8,6 +8,7 @@ import {
 	setActiveFrameCookie
 } from '$lib/server/frame-access';
 import { getContentPlugin } from '$lib/server/plugins/registry';
+import { runPluginInstanceNow } from '$lib/server/plugins/scheduler';
 import { fail, redirect } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
@@ -101,6 +102,24 @@ export const actions: Actions = {
 			.set({ enabled, nextRunAt: new Date(), updatedAt: new Date() })
 			.where(and(eq(pluginInstances.id, id), eq(pluginInstances.frameId, frame.id)));
 		return { toggled: true };
+	},
+
+	runNow: async ({ request, locals }) => {
+		if (!locals.user) return fail(401, { message: 'Unauthorized' });
+		const form = await request.formData();
+		const frame = await canAccessFrame(locals.user, Number(form.get('frameId')));
+		if (!frame) return fail(403, { message: 'Frame not available' });
+		const id = Number(form.get('id'));
+		const [instance] = await db
+			.select({ id: pluginInstances.id, enabled: pluginInstances.enabled })
+			.from(pluginInstances)
+			.where(and(eq(pluginInstances.id, id), eq(pluginInstances.frameId, frame.id)))
+			.limit(1);
+		if (!instance) return fail(404, { message: 'Plugin instance not found' });
+		if (!instance.enabled) return fail(400, { message: 'Enable the plugin before running it' });
+		const ran = await runPluginInstanceNow(instance.id);
+		if (!ran) return fail(409, { message: 'Plugin is already running' });
+		return { ranNow: true };
 	},
 
 	delete: async ({ request, locals }) => {

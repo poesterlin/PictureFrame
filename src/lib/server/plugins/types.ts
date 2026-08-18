@@ -21,6 +21,7 @@ export type ContentPlugin<Config, Data, Model> = {
 	label: string;
 	version: number;
 	configSchema: z.ZodType<Config>;
+	fetchInput?(endpointUrl: string): Promise<unknown>;
 	normalize(input: unknown): Data;
 	evaluate(
 		data: Data,
