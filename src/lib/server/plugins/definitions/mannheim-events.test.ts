@@ -56,6 +56,21 @@ describe('Mannheim events plugin', () => {
 		expect(result.model?.events.some((event) => event.title.includes('exhibition'))).toBe(true);
 	});
 
+	test('can hide weekday events starting during configured work hours', () => {
+		const config = mannheimEventsPlugin.configSchema.parse({
+			maxDurationDays: 3,
+			excludeWorkHours: true,
+			workdayStartHour: 9,
+			workdayEndHour: 17
+		});
+		const result = mannheimEventsPlugin.evaluate(mannheimEventsPlugin.normalize(input), {
+			config,
+			now: new Date('2026-08-18T09:00:00+02:00')
+		});
+
+		expect(result.model?.events.map((event) => event.id)).toEqual(['concert', 'market']);
+	});
+
 	test('renders an 800 by 480 palette preview', async () => {
 		const result = await renderPluginPreview({
 			pluginKey: 'mannheim-events',

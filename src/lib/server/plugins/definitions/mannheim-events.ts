@@ -15,14 +15,21 @@ const occurrenceSchema = z.object({
 });
 
 const responseSchema = z.object({ events: z.array(occurrenceSchema) });
-const configSchema = z.object({
-	title: z.string().trim().min(1).max(40).default('MANNHEIM EVENTS'),
-	maxEvents: z.number().int().min(1).max(4).default(4),
-	daysAhead: z.number().int().min(0).max(30).default(14),
-	maxDurationDays: z.number().int().min(1).max(30).default(2),
-	showVenue: z.boolean().default(true),
-	accent: z.enum(['red', 'blue', 'green', 'orange']).default('blue')
-});
+const configSchema = z
+	.object({
+		title: z.string().trim().min(1).max(40).default('MANNHEIM EVENTS'),
+		maxEvents: z.number().int().min(1).max(4).default(4),
+		daysAhead: z.number().int().min(0).max(30).default(14),
+		maxDurationDays: z.number().int().min(1).max(30).default(2),
+		excludeWorkHours: z.boolean().default(false),
+		workdayStartHour: z.number().int().min(0).max(23).default(9),
+		workdayEndHour: z.number().int().min(1).max(24).default(17),
+		showVenue: z.boolean().default(true),
+		accent: z.enum(['red', 'blue', 'green', 'orange']).default('blue')
+	})
+	.refine((config) => config.workdayEndHour > config.workdayStartHour, {
+		message: 'Workday end must be later than workday start'
+	});
 
 type Config = z.infer<typeof configSchema>;
 type Response = z.infer<typeof responseSchema>;
@@ -94,10 +101,27 @@ function normalizedTitle(title: string) {
 	return title.trim().toLocaleLowerCase('de-DE').replace(/\s+/g, ' ');
 }
 
+function isDuringWorkHours(event: Event, config: Config) {
+	if (!config.excludeWorkHours) return false;
+	const parsedDate = parseDate(event.date);
+	const parsedTime = /^(\d{1,2})(?::(\d{2}))?/.exec(event.time);
+	if (!parsedDate || !parsedTime) return false;
+	const weekday = new Date(
+		Date.UTC(
+			Math.floor(parsedDate.key / 10_000),
+			Math.floor((parsedDate.key % 10_000) / 100) - 1,
+			parsedDate.day
+		)
+	).getUTCDay();
+	if (weekday === 0 || weekday === 6) return false;
+	const minutes = Number(parsedTime[1]) * 60 + Number(parsedTime[2] ?? 0);
+	return minutes >= config.workdayStartHour * 60 && minutes < config.workdayEndHour * 60;
+}
+
 export const mannheimEventsPlugin: ContentPlugin<Config, Response, Model> = {
 	key: 'mannheim-events',
 	label: 'Mannheim events',
-	version: 4,
+	version: 5,
 	configSchema,
 	async fetchInput() {
 		return { events: await fetchMannheimEventOccurrences() };
@@ -125,6 +149,7 @@ export const mannheimEventsPlugin: ContentPlugin<Config, Response, Model> = {
 
 		const events = normalized
 			.filter((event) => event.dateKey >= today && event.dateKey <= lastDay)
+			.filter((event) => !isDuringWorkHours(event, config))
 			.filter(
 				(event) =>
 					(titleDates.get(normalizedTitle(event.title))?.size ?? 1) <= config.maxDurationDays
@@ -168,14 +193,15 @@ export const mannheimEventsPlugin: ContentPlugin<Config, Response, Model> = {
 				<text x="24" y="57" font-family="sans-serif" font-size="16" font-weight="700">${months[parsed.month - 1]}</text>
 				<text x="130" y="24" font-family="sans-serif" font-size="23" font-weight="700">${escapeXml(first)}</text>
 				${second ? `<text x="130" y="46" font-family="sans-serif" font-size="23" font-weight="700">${escapeXml(second)}</text>` : ''}
-				<text x="130" y="${second ? 66 : 48}" font-family="sans-serif" font-size="16" font-weight="700">${escapeXml(truncate(venue, 62))}</text>
-				<text x="700" y="${second ? 66 : 48}" text-anchor="end" font-family="sans-serif" font-size="16" font-weight="700">${escapeXml(event.time)}</text>
+				<text x="130" y="${second ? 66 : 48}" clip-path="url(#venue-clip)" font-family="sans-serif" font-size="16" font-weight="700">${escapeXml(venue)}</text>
+				<text x="754" y="${second ? 66 : 48}" text-anchor="end" font-family="sans-serif" font-size="16" font-weight="700">${escapeXml(event.time)}</text>
 			</g>`;
 			})
 			.join('');
 
 		return Buffer.from(`<svg width="800" height="480" viewBox="0 0 800 480" xmlns="http://www.w3.org/2000/svg">
 			<defs>
+				<clipPath id="venue-clip"><rect x="130" y="0" width="525" height="100"/></clipPath>
 				<pattern id="header" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="white"/><rect x="1" y="1" width="2" height="2" fill="${violet}"/><rect x="5" y="5" width="2" height="2" fill="${model.accent}"/></pattern>
 				<pattern id="dots-0" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="white"/><rect x="2" y="2" width="1" height="1" fill="${violet}"/><rect x="8" y="8" width="1" height="1" fill="${model.accent}"/></pattern>
 				<pattern id="dots-1" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="white"/><rect x="2" y="2" width="2" height="2" fill="${violet}"/><rect x="8" y="8" width="2" height="2" fill="${model.accent}"/></pattern>

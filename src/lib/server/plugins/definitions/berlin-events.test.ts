@@ -89,6 +89,26 @@ describe('Berlin events plugin', () => {
 		expect(evaluation.model?.events.map((event) => event.id)).toEqual(['1']);
 	});
 
+	test('can hide weekday events starting during configured work hours', async () => {
+		const input = {
+			index: apiResponse.index.map((event) =>
+				event.id === 1 ? { ...event, zeit: '10-18 Uhr' } : event
+			)
+		};
+		const config = berlinEventsPlugin.configSchema.parse({
+			daysAhead: 7,
+			excludeWorkHours: true,
+			workdayStartHour: 9,
+			workdayEndHour: 17
+		});
+		const evaluation = await berlinEventsPlugin.evaluate(berlinEventsPlugin.normalize(input), {
+			config,
+			now: new Date('2026-08-09T10:00:00+02:00')
+		});
+
+		expect(evaluation.model?.events.map((event) => event.id)).toEqual(['2', '5']);
+	});
+
 	test('renders a palette preview PNG', async () => {
 		const result = await renderPluginPreview({
 			pluginKey: 'berlin-events',

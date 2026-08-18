@@ -21,15 +21,22 @@ const berlinEventsResponseSchema = z
 	})
 	.passthrough();
 
-const berlinEventsConfigSchema = z.object({
-	title: z.string().trim().min(1).max(40).default('BERLIN EVENTS'),
-	maxEvents: z.number().int().min(1).max(4).default(4),
-	daysAhead: z.number().int().min(0).max(366).default(30),
-	districts: z.array(z.string().trim().min(1)).default([]),
-	includeBrandenburg: z.boolean().default(false),
-	showAddress: z.boolean().default(true),
-	accent: z.enum(['red', 'blue', 'green', 'orange']).default('red')
-});
+const berlinEventsConfigSchema = z
+	.object({
+		title: z.string().trim().min(1).max(40).default('BERLIN EVENTS'),
+		maxEvents: z.number().int().min(1).max(4).default(4),
+		daysAhead: z.number().int().min(0).max(366).default(30),
+		districts: z.array(z.string().trim().min(1)).default([]),
+		includeBrandenburg: z.boolean().default(false),
+		excludeWorkHours: z.boolean().default(false),
+		workdayStartHour: z.number().int().min(0).max(23).default(9),
+		workdayEndHour: z.number().int().min(1).max(24).default(17),
+		showAddress: z.boolean().default(true),
+		accent: z.enum(['red', 'blue', 'green', 'orange']).default('red')
+	})
+	.refine((config) => config.workdayEndHour > config.workdayStartHour, {
+		message: 'Workday end must be later than workday start'
+	});
 
 type BerlinEventsConfig = z.infer<typeof berlinEventsConfigSchema>;
 type BerlinEventsResponse = z.infer<typeof berlinEventsResponseSchema>;
@@ -174,6 +181,17 @@ function formatDateRange(event: DisplayEvent): { day: string; month: string; ran
 	};
 }
 
+function isDuringWorkHours(event: DisplayEvent, config: BerlinEventsConfig): boolean {
+	if (!config.excludeWorkHours || event.startDateKey !== event.endDateKey) return false;
+	const start = parseGermanDate(event.startDate);
+	const parsedTime = /^(\d{1,2})(?::(\d{2}))?/.exec(event.time);
+	if (!start || !parsedTime) return false;
+	const weekday = new Date(Date.UTC(start.year, start.month - 1, start.day)).getUTCDay();
+	if (weekday === 0 || weekday === 6) return false;
+	const minutes = Number(parsedTime[1]) * 60 + Number(parsedTime[2] ?? 0);
+	return minutes >= config.workdayStartHour * 60 && minutes < config.workdayEndHour * 60;
+}
+
 export const berlinEventsPlugin: ContentPlugin<
 	BerlinEventsConfig,
 	BerlinEventsResponse,
@@ -181,7 +199,7 @@ export const berlinEventsPlugin: ContentPlugin<
 > = {
 	key: 'berlin-events',
 	label: 'Berlin events',
-	version: 4,
+	version: 5,
 	configSchema: berlinEventsConfigSchema,
 	normalize(input) {
 		return berlinEventsResponseSchema.parse(input);
@@ -194,6 +212,7 @@ export const berlinEventsPlugin: ContentPlugin<
 			.map(normalizeEvent)
 			.filter((event): event is DisplayEvent => event !== null)
 			.filter((event) => event.endDateKey >= today && event.startDateKey <= lastDay)
+			.filter((event) => !isDuringWorkHours(event, config))
 			.filter((event) => config.includeBrandenburg || event.district !== 'Brandenburg')
 			.filter(
 				(event) =>

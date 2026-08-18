@@ -43,6 +43,9 @@ export const pluginCatalog: PluginCatalogEntry[] = [
 			maxEvents: 4,
 			daysAhead: 14,
 			maxDurationDays: 2,
+			excludeWorkHours: false,
+			workdayStartHour: 9,
+			workdayEndHour: 17,
 			showVenue: true,
 			accent: 'blue'
 		},
@@ -55,6 +58,26 @@ export const pluginCatalog: PluginCatalogEntry[] = [
 				min: 1,
 				max: 30,
 				help: 'Repeated listings beyond this limit are hidden.'
+			},
+			{
+				key: 'excludeWorkHours',
+				label: 'Hide weekday work-hour events',
+				type: 'boolean',
+				help: 'Hides Monday–Friday events starting within the hours below.'
+			},
+			{
+				key: 'workdayStartHour',
+				label: 'Workday starts',
+				type: 'number',
+				min: 0,
+				max: 23
+			},
+			{
+				key: 'workdayEndHour',
+				label: 'Workday ends',
+				type: 'number',
+				min: 1,
+				max: 24
 			}
 		]
 	},
@@ -71,6 +94,9 @@ export const pluginCatalog: PluginCatalogEntry[] = [
 			daysAhead: 30,
 			districts: [],
 			includeBrandenburg: false,
+			excludeWorkHours: false,
+			workdayStartHour: 9,
+			workdayEndHour: 17,
 			showAddress: true,
 			accent: 'red'
 		},
@@ -85,6 +111,26 @@ export const pluginCatalog: PluginCatalogEntry[] = [
 				help: 'Comma-separated; empty shows all.'
 			},
 			{ key: 'includeBrandenburg', label: 'Include Brandenburg', type: 'boolean' },
+			{
+				key: 'excludeWorkHours',
+				label: 'Hide weekday work-hour events',
+				type: 'boolean',
+				help: 'Hides single-day Monday–Friday events starting within the hours below.'
+			},
+			{
+				key: 'workdayStartHour',
+				label: 'Workday starts',
+				type: 'number',
+				min: 0,
+				max: 23
+			},
+			{
+				key: 'workdayEndHour',
+				label: 'Workday ends',
+				type: 'number',
+				min: 1,
+				max: 24
+			},
 			{ key: 'showAddress', label: 'Show address', type: 'boolean' },
 			{
 				key: 'accent',
